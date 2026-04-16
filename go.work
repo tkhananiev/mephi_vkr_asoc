@@ -1,0 +1,10 @@
+go 1.23.0
+
+use (
+	./services/api-service
+	./services/jira-integration-service
+	./services/jira-mock
+	./services/processing-service
+	./services/reference-data-service
+	./services/semgrep-service
+)

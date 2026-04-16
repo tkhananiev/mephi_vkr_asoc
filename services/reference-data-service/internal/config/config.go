@@ -1,0 +1,68 @@
+package config
+
+import (
+	"os"
+	"strings"
+	"time"
+)
+
+type Config struct {
+	HTTPPort      string
+	PostgresDSN   string
+	KafkaBrokers  []string
+	BDUFeedURL    string
+	BDUInsecure   bool
+	NVDAPIBaseURL string
+	SyncInterval  time.Duration
+}
+
+func Load() Config {
+	return Config{
+		HTTPPort:      getEnv("APP_HTTP_PORT", "8081"),
+		PostgresDSN:   getEnv("APP_POSTGRES_DSN", "postgres://aspm:aspm@localhost:5432/aspm?sslmode=disable"),
+		KafkaBrokers:  splitCSV(getEnv("APP_KAFKA_BROKERS", "localhost:9092")),
+		BDUFeedURL:    getEnv("APP_BDU_FEED_URL", "https://bdu.fstec.ru/feed"),
+		BDUInsecure:   getBool("APP_BDU_INSECURE_SKIP_VERIFY", true),
+		NVDAPIBaseURL: getEnv("APP_NVD_API_BASE_URL", "https://services.nvd.nist.gov/rest/json/cves/2.0"),
+		SyncInterval:  getDuration("APP_SYNC_INTERVAL", 24*time.Hour),
+	}
+}
+
+func getEnv(key, fallback string) string {
+	if value := strings.TrimSpace(os.Getenv(key)); value != "" {
+		return value
+	}
+	return fallback
+}
+
+func getDuration(key string, fallback time.Duration) time.Duration {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return fallback
+	}
+
+	duration, err := time.ParseDuration(value)
+	if err != nil {
+		return fallback
+	}
+	return duration
+}
+
+func splitCSV(value string) []string {
+	chunks := strings.Split(value, ",")
+	result := make([]string, 0, len(chunks))
+	for _, chunk := range chunks {
+		if trimmed := strings.TrimSpace(chunk); trimmed != "" {
+			result = append(result, trimmed)
+		}
+	}
+	return result
+}
+
+func getBool(key string, fallback bool) bool {
+	value := strings.TrimSpace(strings.ToLower(os.Getenv(key)))
+	if value == "" {
+		return fallback
+	}
+	return value == "1" || value == "true" || value == "yes"
+}

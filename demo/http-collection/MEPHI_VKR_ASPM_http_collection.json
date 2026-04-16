@@ -1,0 +1,115 @@
+{
+  "info": {
+    "name": "MEPHI VKR ASPM Demo",
+    "_postman_id": "c83f88a6-7d86-45f9-a5d2-0b7c6d67b6d2",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Health API",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "http://localhost:8080/health",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "8080",
+          "path": ["health"]
+        }
+      }
+    },
+    {
+      "name": "Sync NVD Demo CVE",
+      "request": {
+        "method": "POST",
+        "url": {
+          "raw": "http://localhost:8081/api/v1/sync/nvd?cve_id=CVE-2021-44228",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "8081",
+          "path": ["api", "v1", "sync", "nvd"],
+          "query": [
+            {
+              "key": "cve_id",
+              "value": "CVE-2021-44228"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Sync BDU",
+      "request": {
+        "method": "POST",
+        "url": {
+          "raw": "http://localhost:8081/api/v1/sync/bdu",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "8081",
+          "path": ["api", "v1", "sync", "bdu"]
+        }
+      }
+    },
+    {
+      "name": "Run Semgrep Scenario",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"target_path\": \"/app/demo/vulnerable-app\",\n  \"scanner_name\": \"semgrep\"\n}"
+        },
+        "url": {
+          "raw": "http://localhost:8080/api/v1/scans/semgrep",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "8080",
+          "path": ["api", "v1", "scans", "semgrep"]
+        }
+      }
+    },
+    {
+      "name": "List Sync Runs",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "http://localhost:8081/api/v1/sync/runs?limit=10",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "8081",
+          "path": ["api", "v1", "sync", "runs"],
+          "query": [
+            {
+              "key": "limit",
+              "value": "10"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "List Groups",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "http://localhost:8082/api/v1/groups?limit=10",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "8082",
+          "path": ["api", "v1", "groups"],
+          "query": [
+            {
+              "key": "limit",
+              "value": "10"
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

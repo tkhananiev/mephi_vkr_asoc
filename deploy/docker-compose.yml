@@ -1,0 +1,127 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: mephi-vkr-postgres
+    environment:
+      POSTGRES_DB: aspm
+      POSTGRES_USER: aspm
+      POSTGRES_PASSWORD: aspm
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ../migrations:/docker-entrypoint-initdb.d
+
+  kafka:
+    image: apache/kafka:3.9.0
+    container_name: mephi-vkr-kafka
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+    ports:
+      - "9092:9092"
+
+  reference-data-service:
+    image: golang:1.23
+    container_name: mephi-vkr-reference-data-service
+    working_dir: /app/services/reference-data-service
+    command: sh -c "go mod download && go run ./cmd/reference-data-service"
+    environment:
+      APP_HTTP_PORT: "8081"
+      APP_POSTGRES_DSN: postgres://aspm:aspm@postgres:5432/aspm?sslmode=disable
+      APP_KAFKA_BROKERS: kafka:9092
+      APP_BDU_FEED_URL: https://bdu.fstec.ru/feed
+      APP_NVD_API_BASE_URL: https://services.nvd.nist.gov/rest/json/cves/2.0
+      APP_SYNC_INTERVAL: 24h
+    volumes:
+      - ..:/app
+    depends_on:
+      - postgres
+      - kafka
+    ports:
+      - "8081:8081"
+
+  processing-service:
+    image: golang:1.23
+    container_name: mephi-vkr-processing-service
+    working_dir: /app/services/processing-service
+    command: sh -c "go mod download && go run ./cmd/processing-service"
+    environment:
+      APP_HTTP_PORT: "8082"
+      APP_POSTGRES_DSN: postgres://aspm:aspm@postgres:5432/aspm?sslmode=disable
+    volumes:
+      - ..:/app
+    depends_on:
+      - postgres
+    ports:
+      - "8082:8082"
+
+  semgrep-service:
+    build:
+      context: ..
+      dockerfile: services/semgrep-service/Dockerfile
+    container_name: mephi-vkr-semgrep-service
+    environment:
+      APP_HTTP_PORT: "8085"
+      APP_SEMGREP_CONFIG: /app/demo/semgrep-rules.yml
+    volumes:
+      - ../demo:/app/demo:ro
+    ports:
+      - "8085:8085"
+
+  api-service:
+    build:
+      context: ..
+      dockerfile: services/api-service/Dockerfile
+    container_name: mephi-vkr-api-service
+    environment:
+      APP_HTTP_PORT: "8080"
+      APP_PROCESSING_SERVICE_URL: http://processing-service:8082
+      APP_JIRA_SERVICE_URL: http://jira-integration-service:8083
+      APP_SEMGREP_SERVICE_URL: http://semgrep-service:8085
+    depends_on:
+      - processing-service
+      - jira-integration-service
+      - semgrep-service
+    ports:
+      - "8080:8080"
+
+  jira-integration-service:
+    image: golang:1.23
+    container_name: mephi-vkr-jira-integration-service
+    working_dir: /app/services/jira-integration-service
+    command: sh -c "go mod download && go run ./cmd/jira-integration-service"
+    environment:
+      APP_HTTP_PORT: "8083"
+      APP_POSTGRES_DSN: postgres://aspm:aspm@postgres:5432/aspm?sslmode=disable
+      APP_JIRA_BASE_URL: http://jira-mock:8090
+      APP_JIRA_PROJECT_KEY: ASPM
+    volumes:
+      - ..:/app
+    depends_on:
+      - postgres
+      - jira-mock
+    ports:
+      - "8083:8083"
+
+  jira-mock:
+    image: golang:1.23
+    container_name: mephi-vkr-jira-mock
+    working_dir: /app/services/jira-mock
+    command: sh -c "go run ./cmd/jira-mock"
+    volumes:
+      - ..:/app
+    ports:
+      - "8090:8090"
+
+volumes:
+  postgres_data:

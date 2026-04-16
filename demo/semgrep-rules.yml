@@ -1,0 +1,12 @@
+rules:
+  - id: demo-shell-injection
+    languages:
+      - python
+    severity: ERROR
+    message: User input reaches subprocess with shell=True.
+    patterns:
+      - pattern: subprocess.run(..., shell=True, ...)
+    metadata:
+      cve: CVE-2021-44228
+      cwe:
+        - CWE-78
