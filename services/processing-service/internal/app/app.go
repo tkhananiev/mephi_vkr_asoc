@@ -10,6 +10,7 @@ import (
 
 	"mephi_vkr_aspm/services/processing-service/internal/config"
 	"mephi_vkr_aspm/services/processing-service/internal/httpapi"
+	pkgkafka "mephi_vkr_aspm/services/processing-service/internal/kafka"
 	"mephi_vkr_aspm/services/processing-service/internal/service"
 	"mephi_vkr_aspm/services/processing-service/internal/storage/postgres"
 )
@@ -31,6 +32,19 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 
 	repo := postgres.New(pool)
 	processingService := service.New(repo)
+
+	if cfg.KafkaIngestEnabled {
+		if err := pkgkafka.EnsureTopics(ctx, cfg.KafkaBrokers, cfg.KafkaTopicIngest, cfg.KafkaTopicResult); err != nil {
+			return nil, fmt.Errorf("kafka ensure topics: %w", err)
+		}
+		cons := pkgkafka.NewIngestConsumer(cfg.KafkaBrokers, cfg.KafkaTopicIngest, cfg.KafkaTopicResult, processingService)
+		go func() {
+			if err := cons.Run(context.Background()); err != nil {
+				log.Printf("kafka ingest consumer exited: %v", err)
+			}
+		}()
+		log.Printf("kafka ingest consumer running (topics %s -> %s)", cfg.KafkaTopicIngest, cfg.KafkaTopicResult)
+	}
 
 	mux := http.NewServeMux()
 	handler := httpapi.New(processingService)

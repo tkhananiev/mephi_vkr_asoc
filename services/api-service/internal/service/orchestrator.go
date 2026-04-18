@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	apikafka "mephi_vkr_aspm/services/api-service/internal/kafka"
 	"mephi_vkr_aspm/services/api-service/internal/models"
 )
 
@@ -18,14 +19,16 @@ type Orchestrator struct {
 	jiraURL       string
 	semgrepURL    string
 	httpClient    *http.Client
+	kafkaIngest   *apikafka.IngestBridge
 }
 
-func New(processingURL, jiraURL, semgrepURL string) *Orchestrator {
+func New(processingURL, jiraURL, semgrepURL string, kafkaIngest *apikafka.IngestBridge) *Orchestrator {
 	return &Orchestrator{
 		processingURL: strings.TrimRight(processingURL, "/"),
 		jiraURL:       strings.TrimRight(jiraURL, "/"),
 		semgrepURL:    strings.TrimRight(semgrepURL, "/"),
 		httpClient:    &http.Client{Timeout: 10 * time.Minute},
+		kafkaIngest:   kafkaIngest,
 	}
 }
 
@@ -60,10 +63,16 @@ func (o *Orchestrator) RunSemgrepScenario(ctx context.Context, request models.Sc
 		})
 	}
 
-	processingResponse, err := o.sendToProcessing(ctx, models.ProcessingIngestRequest{
+	ingest := models.ProcessingIngestRequest{
 		ScannerName: request.ScannerName,
 		Findings:    findings,
-	})
+	}
+	var processingResponse models.ProcessingResponse
+	if o.kafkaIngest != nil {
+		processingResponse, err = o.kafkaIngest.PublishAndWait(ctx, ingest)
+	} else {
+		processingResponse, err = o.sendToProcessing(ctx, ingest)
+	}
 	if err != nil {
 		return models.PassportResponse{}, err
 	}

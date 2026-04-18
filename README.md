@@ -2,7 +2,7 @@
 
 MVP-каркас сервиса управления уязвимостями для ВКР.
 
-Подробное описание **фактического взаимодействия микросервисов**, корреляции через общую БД и отличий от планируемого контура (React, Swagger, auth, Kafka) — в [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+Подробное описание **фактического взаимодействия микросервисов**, корреляции через общую БД, Kafka-ingest и отличий от планируемого контура (React, Swagger, auth) — в [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 ## Текущий состав
 
@@ -31,7 +31,7 @@ MVP-каркас сервиса управления уязвимостями д
   - сырых записей
   - нормализованных справочных записей
   - алиасов (`CVE`, и др.)
-- прием находок в `processing-service`
+- прием находок в `processing-service` (HTTP и/или Kafka)
 - базовая корреляция по `CVE`
 - группировка в `vulnerability_groups`
 - запуск `Semgrep` через `api-service`
@@ -45,12 +45,12 @@ MVP-каркас сервиса управления уязвимостями д
 Клиент (HTTP)
   -> api-service (POST /api/v1/scans/semgrep)
   -> semgrep-service (POST /api/v1/scan; Semgrep в отдельном контейнере)
-  -> api-service -> processing-service (POST /api/v1/findings/ingest; корреляция по CVE через PostgreSQL / catalog.*)
+  -> api-service -> Kafka (aspm.findings.ingest) -> processing-service -> Kafka (aspm.findings.ingest.result); корреляция по CVE через PostgreSQL / catalog.* [или HTTP ingest без Kafka, если APP_KAFKA_BROKERS не задан]
   -> api-service -> GET groups -> POST /api/v1/tickets
   -> jira-integration-service -> jira-mock (на стенде)
 ```
 
-Kafka в compose есть; прикладной обмен через топики в MVP не используется (см. `docs/ARCHITECTURE.md`).
+Kafka в compose используется для **ingest находок** (`api-service` → топик → `processing-service` → топик ответа); подробности и noop для reference-data — в `docs/ARCHITECTURE.md`.
 
 ## Быстрый старт
 

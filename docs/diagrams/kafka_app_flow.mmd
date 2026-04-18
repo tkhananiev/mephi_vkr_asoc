@@ -1,0 +1,26 @@
+%% Поток с Kafka для ingest находок (compose с APP_KAFKA_BROKERS).
+%% Рендер: Mermaid в VS Code / GitHub / diagrams.net (import)
+
+flowchart LR
+  Client[HTTP клиент]
+  API[api-service]
+  SG[semgrep-service]
+  K[Kafka<br/>aspm.findings.ingest<br/>aspm.findings.ingest.result]
+  PR[processing-service]
+  RD[reference-data-service]
+  JI[jira-integration-service]
+  JM[jira-mock]
+  DB[(PostgreSQL)]
+
+  Client --> API
+  API -->|POST /api/v1/scan| SG
+  API -->|produce ingest| K
+  K -->|consume| PR
+  PR -->|produce result| K
+  K -->|read reply| API
+  API -->|GET /groups| PR
+  RD -->|sync записи| DB
+  PR -->|чтение catalog, запись находок| DB
+  API -->|POST /tickets| JI
+  JI --> JM
+  JI --> DB

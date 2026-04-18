@@ -58,10 +58,12 @@ services:
     environment:
       APP_HTTP_PORT: "8082"
       APP_POSTGRES_DSN: postgres://aspm:aspm@postgres:5432/aspm?sslmode=disable
+      APP_KAFKA_BROKERS: kafka:9092
     volumes:
       - ..:/app
     depends_on:
       - postgres
+      - kafka
     ports:
       - "8082:8082"
 
@@ -88,7 +90,9 @@ services:
       APP_PROCESSING_SERVICE_URL: http://processing-service:8082
       APP_JIRA_SERVICE_URL: http://jira-integration-service:8083
       APP_SEMGREP_SERVICE_URL: http://semgrep-service:8085
+      APP_KAFKA_BROKERS: kafka:9092
     depends_on:
+      - kafka
       - processing-service
       - jira-integration-service
       - semgrep-service

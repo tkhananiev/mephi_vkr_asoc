@@ -18,6 +18,8 @@ cd mephi_vkr_aspm
 docker compose -f deploy/docker-compose.yml up -d --build
 ```
 
+В compose для `api-service` и `processing-service` задан **`APP_KAFKA_BROKERS=kafka:9092`**: ingest находок идёт через топики **`aspm.findings.ingest`** / **`aspm.findings.ingest.result`** (см. `docs/ARCHITECTURE.md`). Без этой переменной `api-service` использует только HTTP `POST .../findings/ingest`.
+
 ## Проверка здоровья сервисов
 
 ```bash

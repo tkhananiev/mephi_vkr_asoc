@@ -10,6 +10,9 @@ type Config struct {
 	ProcessingServiceURL string
 	JiraServiceURL       string
 	SemgrepServiceURL    string
+	KafkaBrokers         []string
+	KafkaTopicIngest     string
+	KafkaTopicResult     string
 }
 
 func Load() Config {
@@ -18,7 +21,22 @@ func Load() Config {
 		ProcessingServiceURL: getEnv("APP_PROCESSING_SERVICE_URL", "http://localhost:8082"),
 		JiraServiceURL:       getEnv("APP_JIRA_SERVICE_URL", "http://localhost:8083"),
 		SemgrepServiceURL:    getEnv("APP_SEMGREP_SERVICE_URL", "http://localhost:8085"),
+		KafkaBrokers:         splitCSV(getEnv("APP_KAFKA_BROKERS", "")),
+		KafkaTopicIngest:     getEnv("APP_KAFKA_TOPIC_FINDINGS_INGEST", "aspm.findings.ingest"),
+		KafkaTopicResult:     getEnv("APP_KAFKA_TOPIC_FINDINGS_RESULT", "aspm.findings.ingest.result"),
 	}
+}
+
+func splitCSV(s string) []string {
+	parts := strings.Split(s, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 func getEnv(key, fallback string) string {
