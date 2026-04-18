@@ -48,7 +48,8 @@ Semgrep установлен **в образе `semgrep-service`**. `api-service
 
 ## Синхронизация справочников
 
-- Вызываются **явно** через REST `reference-data-service` (`/api/v1/sync/...`), фонового планировщика в процессе MVP нет.
+- По расписанию (по умолчанию раз в **24h**, задержка первого запуска **1m**): `APP_SYNC_SCHEDULER_ENABLED`, `APP_SYNC_INITIAL_DELAY`, `APP_SYNC_INTERVAL`. При `APP_SYNC_INTERVAL=0` или `APP_SYNC_SCHEDULER_ENABLED=false` только ручной запуск.
+- Дополнительно можно вызывать **явно** через REST `reference-data-service` (`/api/v1/sync/...`).
 - После успешной синхронизации вызывается заглушка **Kafka publisher** (`noop`: запись в лог), чтобы сохранить место под будущие доменные события.
 
 ## Порты (docker-compose)

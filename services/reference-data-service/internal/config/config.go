@@ -7,24 +7,28 @@ import (
 )
 
 type Config struct {
-	HTTPPort      string
-	PostgresDSN   string
-	KafkaBrokers  []string
-	BDUFeedURL    string
-	BDUInsecure   bool
-	NVDAPIBaseURL string
-	SyncInterval  time.Duration
+	HTTPPort              string
+	PostgresDSN           string
+	KafkaBrokers          []string
+	BDUFeedURL            string
+	BDUInsecure           bool
+	NVDAPIBaseURL         string
+	SyncInterval          time.Duration
+	SyncSchedulerEnabled  bool
+	SyncInitialDelay      time.Duration
 }
 
 func Load() Config {
 	return Config{
-		HTTPPort:      getEnv("APP_HTTP_PORT", "8081"),
-		PostgresDSN:   getEnv("APP_POSTGRES_DSN", "postgres://aspm:aspm@localhost:5432/aspm?sslmode=disable"),
-		KafkaBrokers:  splitCSV(getEnv("APP_KAFKA_BROKERS", "localhost:9092")),
-		BDUFeedURL:    getEnv("APP_BDU_FEED_URL", "https://bdu.fstec.ru/feed"),
-		BDUInsecure:   getBool("APP_BDU_INSECURE_SKIP_VERIFY", true),
-		NVDAPIBaseURL: getEnv("APP_NVD_API_BASE_URL", "https://services.nvd.nist.gov/rest/json/cves/2.0"),
-		SyncInterval:  getDuration("APP_SYNC_INTERVAL", 24*time.Hour),
+		HTTPPort:             getEnv("APP_HTTP_PORT", "8081"),
+		PostgresDSN:          getEnv("APP_POSTGRES_DSN", "postgres://aspm:aspm@localhost:5432/aspm?sslmode=disable"),
+		KafkaBrokers:         splitCSV(getEnv("APP_KAFKA_BROKERS", "localhost:9092")),
+		BDUFeedURL:           getEnv("APP_BDU_FEED_URL", "https://bdu.fstec.ru/feed"),
+		BDUInsecure:          getBool("APP_BDU_INSECURE_SKIP_VERIFY", true),
+		NVDAPIBaseURL:        getEnv("APP_NVD_API_BASE_URL", "https://services.nvd.nist.gov/rest/json/cves/2.0"),
+		SyncInterval:         getDuration("APP_SYNC_INTERVAL", 24*time.Hour),
+		SyncSchedulerEnabled: getBool("APP_SYNC_SCHEDULER_ENABLED", true),
+		SyncInitialDelay:     getDuration("APP_SYNC_INITIAL_DELAY", time.Minute),
 	}
 }
 
