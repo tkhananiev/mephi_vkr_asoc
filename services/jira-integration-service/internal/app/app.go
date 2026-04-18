@@ -2,7 +2,6 @@ package app
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"net/http"
 
@@ -20,13 +19,9 @@ type App struct {
 }
 
 func New(ctx context.Context, cfg config.Config) (*App, error) {
-	pool, err := pgxpool.New(ctx, cfg.PostgresDSN)
+	pool, err := connectPostgresWithRetry(ctx, cfg.PostgresDSN)
 	if err != nil {
-		return nil, fmt.Errorf("connect postgres: %w", err)
-	}
-
-	if err := pool.Ping(ctx); err != nil {
-		return nil, fmt.Errorf("ping postgres: %w", err)
+		return nil, err
 	}
 
 	repo := postgres.New(pool)
