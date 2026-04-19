@@ -3,10 +3,13 @@ package bdu
 import (
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"encoding/xml"
+	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"regexp"
 	"strings"
 	"time"
@@ -36,16 +39,44 @@ type rssItem struct {
 var bduIDPattern = regexp.MustCompile(`BDU:\d+`)
 var cvePattern = regexp.MustCompile(`CVE-\d{4}-\d+`)
 
-func New(feedURL string, insecure bool) *Client {
+// New создаёт клиент БДУ. skipTLSVerify — пропуск проверки сертификата (нужно, если УЦ ФСТЭК нет в системном хранилище).
+// rootCAPEMPath — путь к PEM с дополнительным корневым/промежуточным УЦ; если не пусто, используется доверенный пул вместо skipTLSVerify.
+func New(feedURL string, skipTLSVerify bool, rootCAPEMPath string) (*Client, error) {
+	tlsConfig, err := bduTLSConfig(skipTLSVerify, rootCAPEMPath)
+	if err != nil {
+		return nil, err
+	}
 	return &Client{
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
 			Transport: &http.Transport{
-				TLSClientConfig: &tls.Config{InsecureSkipVerify: insecure}, //nolint:gosec
+				TLSClientConfig: tlsConfig,
 			},
 		},
-		feedURL:    feedURL,
+		feedURL: feedURL,
+	}, nil
+}
+
+func bduTLSConfig(skipTLSVerify bool, rootCAPEMPath string) (*tls.Config, error) {
+	path := strings.TrimSpace(rootCAPEMPath)
+	if path != "" {
+		pemData, err := os.ReadFile(path)
+		if err != nil {
+			return nil, fmt.Errorf("bdu tls: read CA file %q: %w", path, err)
+		}
+		pool, err := x509.SystemCertPool()
+		if err != nil {
+			pool = x509.NewCertPool()
+		}
+		if !pool.AppendCertsFromPEM(pemData) {
+			return nil, fmt.Errorf("bdu tls: no certificates parsed from %q", path)
+		}
+		return &tls.Config{RootCAs: pool, MinVersion: tls.VersionTLS12}, nil
 	}
+	if skipTLSVerify {
+		return &tls.Config{InsecureSkipVerify: true, MinVersion: tls.VersionTLS12}, nil //nolint:gosec
+	}
+	return &tls.Config{MinVersion: tls.VersionTLS12}, nil
 }
 
 func (c *Client) Fetch(ctx context.Context) ([]models.SourceRecord, error) {

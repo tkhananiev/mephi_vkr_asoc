@@ -35,10 +35,14 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 
 	repo := postgres.New(pool)
 	publisher := kafka.NewNoopPublisher()
+	bduClient, err := bdu.New(cfg.BDUFeedURL, cfg.BDUInsecure, cfg.BDURootCAFile)
+	if err != nil {
+		return nil, err
+	}
 	syncService := service.NewSyncService(
 		repo,
 		publisher,
-		bdu.New(cfg.BDUFeedURL, cfg.BDUInsecure),
+		bduClient,
 		nvd.New(cfg.NVDAPIBaseURL, cfg.NVDAPIKey, cfg.NVDPageSize, cfg.NVDMaxPages),
 	)
 

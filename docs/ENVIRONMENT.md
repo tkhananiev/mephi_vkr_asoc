@@ -46,7 +46,8 @@
 | `APP_POSTGRES_DSN` | `postgres://aspm:aspm@postgres:5432/aspm?sslmode=disable` | `postgres://aspm:aspm@localhost:5432/aspm?sslmode=disable` |
 | `APP_KAFKA_BROKERS` | `kafka:9092` | `localhost:9092` |
 | `APP_BDU_FEED_URL` | `https://bdu.fstec.ru/feed` | то же |
-| `APP_BDU_INSECURE_SKIP_VERIFY` | — | `true` |
+| `APP_BDU_INSECURE_SKIP_VERIFY` | `true` (в compose) | `true`; без доверия к УЦ ФСТЭК в системе — иначе TLS к фиду падает |
+| `APP_BDU_ROOT_CA_FILE` | — | _(пусто)_; путь к PEM с доп. корневым УЦ в контейнере — строгая проверка TLS без отключения проверки |
 | `APP_NVD_API_BASE_URL` | `https://services.nvd.nist.gov/rest/json/cves/2.0` | то же |
 | `APP_NVD_API_KEY` | — | _(пусто)_; ключ NVD для более высокого лимита запросов |
 | `APP_NVD_PAGE_SIZE` | — | `2000` |

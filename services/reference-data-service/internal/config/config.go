@@ -13,6 +13,7 @@ type Config struct {
 	KafkaBrokers          []string
 	BDUFeedURL            string
 	BDUInsecure           bool
+	BDURootCAFile         string // PEM с доп. корневым УЦ (напр. Минцифры); если задан — проверка TLS без InsecureSkipVerify
 	NVDAPIBaseURL         string
 	NVDAPIKey             string
 	NVDPageSize           int
@@ -29,6 +30,7 @@ func Load() Config {
 		KafkaBrokers:         splitCSV(getEnv("APP_KAFKA_BROKERS", "localhost:9092")),
 		BDUFeedURL:           getEnv("APP_BDU_FEED_URL", "https://bdu.fstec.ru/feed"),
 		BDUInsecure:          getBool("APP_BDU_INSECURE_SKIP_VERIFY", true),
+		BDURootCAFile:        getEnv("APP_BDU_ROOT_CA_FILE", ""),
 		NVDAPIBaseURL:        getEnv("APP_NVD_API_BASE_URL", "https://services.nvd.nist.gov/rest/json/cves/2.0"),
 		NVDAPIKey:            getEnv("APP_NVD_API_KEY", ""),
 		NVDPageSize:          getInt("APP_NVD_PAGE_SIZE", 2000),
