@@ -31,10 +31,11 @@ services:
       - "9092:9092"
 
   reference-data-service:
-    image: golang:1.23
+    build:
+      context: ..
+      dockerfile: services/reference-data-service/Dockerfile
     container_name: mephi-vkr-reference-data-service
-    working_dir: /app/services/reference-data-service
-    command: sh -c "go mod download && go run ./cmd/reference-data-service"
+    restart: unless-stopped
     environment:
       APP_HTTP_PORT: "8081"
       APP_POSTGRES_DSN: postgres://aspm:aspm@postgres:5432/aspm?sslmode=disable
@@ -44,8 +45,6 @@ services:
       APP_SYNC_SCHEDULER_ENABLED: "true"
       APP_SYNC_INITIAL_DELAY: 1m
       APP_SYNC_INTERVAL: 24h
-    volumes:
-      - ..:/app
     depends_on:
       - postgres
       - kafka

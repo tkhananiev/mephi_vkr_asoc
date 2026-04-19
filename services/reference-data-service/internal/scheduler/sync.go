@@ -36,6 +36,12 @@ func run(ctx context.Context, svc *service.SyncService, interval, initialDelay t
 }
 
 func runOnce(svc *service.SyncService) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("scheduled sync panic (recovered): %v", r)
+		}
+	}()
+
 	// Полная выгрузка NVD может занимать много часов (лимиты API); не обрывать через 6h.
 	reqCtx, cancel := context.WithTimeout(context.Background(), 168*time.Hour)
 	defer cancel()

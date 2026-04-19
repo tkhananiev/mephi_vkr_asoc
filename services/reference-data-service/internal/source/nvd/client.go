@@ -16,7 +16,7 @@ import (
 const (
 	maxResultsPerPageNVD = 2000
 	// NVD: без ключа ~5 запросов / 30 с; с ключом ~50 / 30 с.
-	throttleNoAPIKey   = 6 * time.Second
+	throttleNoAPIKey  = 6 * time.Second
 	throttleWithAPIKey = 650 * time.Millisecond
 )
 
@@ -34,11 +34,11 @@ type apiResponse struct {
 	StartIndex      int `json:"startIndex"`
 	Vulnerabilities []struct {
 		CVE struct {
-			ID           string `json:"id"`
-			Published    string `json:"published"`
-			LastModified string `json:"lastModified"`
-			VulnStatus   string `json:"vulnStatus"`
-			Descriptions []struct {
+			ID               string `json:"id"`
+			Published        string `json:"published"`
+			LastModified     string `json:"lastModified"`
+			VulnStatus       string `json:"vulnStatus"`
+			Descriptions     []struct {
 				Lang  string `json:"lang"`
 				Value string `json:"value"`
 			} `json:"descriptions"`
@@ -117,10 +117,6 @@ func (c *Client) SyncAllPages(ctx context.Context, onPage func([]models.SourceRe
 		}
 
 		total := payload.TotalResults
-		debugLogNVD("H1", "nvd/client.go:SyncAllPages", "nvd_page", map[string]any{
-			"startIndex": startIndex, "totalResults": total, "resultsPerPage": payload.ResultsPerPage,
-			"chunkLen": len(chunk), "pageNum": pageNum, "pageSize": c.pageSize,
-		})
 
 		if len(chunk) > 0 {
 			if err := onPage(chunk); err != nil {
