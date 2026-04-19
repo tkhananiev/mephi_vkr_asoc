@@ -48,6 +48,9 @@
 | `APP_BDU_FEED_URL` | `https://bdu.fstec.ru/feed` | то же |
 | `APP_BDU_INSECURE_SKIP_VERIFY` | — | `true` |
 | `APP_NVD_API_BASE_URL` | `https://services.nvd.nist.gov/rest/json/cves/2.0` | то же |
+| `APP_NVD_API_KEY` | — | _(пусто)_; ключ NVD для более высокого лимита запросов |
+| `APP_NVD_PAGE_SIZE` | — | `2000` |
+| `APP_NVD_MAX_PAGES` | — | `0` (= все страницы); иначе ограничение числа страниц за один `POST /sync/nvd` |
 | `APP_SYNC_SCHEDULER_ENABLED` | `true` | `true` |
 | `APP_SYNC_INITIAL_DELAY` | `1m` | `1m` |
 | `APP_SYNC_INTERVAL` | `24h` | `24h` |

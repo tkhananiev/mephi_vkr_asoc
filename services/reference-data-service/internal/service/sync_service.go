@@ -19,6 +19,11 @@ type NVDSourceClient interface {
 	FetchByCVE(ctx context.Context, cveID string) ([]models.SourceRecord, error)
 }
 
+// NVDFullSync — постраничная загрузка NVD без хранения всего каталога в памяти.
+type NVDFullSync interface {
+	SyncAllPages(ctx context.Context, onPage func([]models.SourceRecord) error) error
+}
+
 type SyncService struct {
 	repo      repository.ReferenceRepository
 	publisher kafka.Publisher
@@ -45,7 +50,42 @@ func (s *SyncService) SyncBDU(ctx context.Context) (models.SyncResult, error) {
 }
 
 func (s *SyncService) SyncNVD(ctx context.Context) (models.SyncResult, error) {
-	return s.syncSource(ctx, "nvd", s.nvd)
+	runID, err := s.repo.StartSyncRun(ctx, "nvd")
+	if err != nil {
+		return models.SyncResult{}, err
+	}
+
+	result := models.SyncResult{
+		SourceCode: "nvd",
+		RunID:      runID,
+	}
+
+	paged, ok := s.nvd.(NVDFullSync)
+	if !ok {
+		return s.syncSource(ctx, "nvd", s.nvd)
+	}
+
+	err = paged.SyncAllPages(ctx, func(page []models.SourceRecord) error {
+		d, p, ins, upd := s.applyRecords(ctx, "nvd", page)
+		result.ItemsDiscovered += d
+		result.ItemsProcessed += p
+		result.ItemsInserted += ins
+		result.ItemsUpdated += upd
+		return nil
+	})
+	if err != nil {
+		errMsg := err.Error()
+		_ = s.repo.FinishSyncRun(ctx, runID, "failed", result, &errMsg)
+		return result, err
+	}
+
+	if err := s.repo.FinishSyncRun(ctx, runID, "completed", result, nil); err != nil {
+		return result, fmt.Errorf("finish sync run: %w", err)
+	}
+	if err := s.publisher.PublishSyncCompleted(ctx, result); err != nil {
+		log.Printf("publish sync completed failed: %v", err)
+	}
+	return result, nil
 }
 
 func (s *SyncService) SyncNVDByCVE(ctx context.Context, cveID string) (models.SyncResult, error) {
@@ -94,14 +134,9 @@ func (s *SyncService) syncSource(ctx context.Context, sourceCode string, client 
 	return s.persistRecords(ctx, runID, sourceCode, records)
 }
 
-func (s *SyncService) persistRecords(ctx context.Context, runID int64, sourceCode string, records []models.SourceRecord) (models.SyncResult, error) {
-	result := models.SyncResult{
-		SourceCode: sourceCode,
-		RunID:      runID,
-	}
-
-	result.ItemsDiscovered = len(records)
-
+// applyRecords записывает батч записей; возвращает счётчики для накопления (NVD по страницам).
+func (s *SyncService) applyRecords(ctx context.Context, sourceCode string, records []models.SourceRecord) (discovered, processed, inserted, updated int) {
+	discovered = len(records)
 	for _, record := range records {
 		rawItem := models.RawItem{
 			SourceCode:  sourceCode,
@@ -115,7 +150,7 @@ func (s *SyncService) persistRecords(ctx context.Context, runID int64, sourceCod
 			continue
 		}
 
-		inserted, err := s.repo.UpsertReferenceRecord(ctx, models.ReferenceRecord{
+		wasNew, err := s.repo.UpsertReferenceRecord(ctx, models.ReferenceRecord{
 			SourceCode:  sourceCode,
 			ExternalID:  record.ExternalID,
 			Title:       record.Title,
@@ -133,13 +168,27 @@ func (s *SyncService) persistRecords(ctx context.Context, runID int64, sourceCod
 			continue
 		}
 
-		result.ItemsProcessed++
-		if inserted {
-			result.ItemsInserted++
+		processed++
+		if wasNew {
+			inserted++
 		} else {
-			result.ItemsUpdated++
+			updated++
 		}
 	}
+	return discovered, processed, inserted, updated
+}
+
+func (s *SyncService) persistRecords(ctx context.Context, runID int64, sourceCode string, records []models.SourceRecord) (models.SyncResult, error) {
+	result := models.SyncResult{
+		SourceCode: sourceCode,
+		RunID:      runID,
+	}
+
+	d, p, ins, upd := s.applyRecords(ctx, sourceCode, records)
+	result.ItemsDiscovered = d
+	result.ItemsProcessed = p
+	result.ItemsInserted = ins
+	result.ItemsUpdated = upd
 
 	if err := s.repo.FinishSyncRun(ctx, runID, "completed", result, nil); err != nil {
 		return result, fmt.Errorf("finish sync run: %w", err)

@@ -11,6 +11,11 @@ import (
 	"mephi_vkr_aspm/services/reference-data-service/internal/service"
 )
 
+// longRunningSyncContext — долгий синк без отмены при закрытии HTTP-клиента; defer cancel() в обработчике.
+func longRunningSyncContext() (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.Background(), 168*time.Hour)
+}
+
 type Handler struct {
 	syncService *service.SyncService
 }
@@ -36,7 +41,9 @@ func (h *Handler) handleSyncBDU(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
 		return
 	}
-	result, err := h.syncService.SyncBDU(r.Context())
+	ctx, cancel := longRunningSyncContext()
+	defer cancel()
+	result, err := h.syncService.SyncBDU(ctx)
 	if err != nil {
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
 		return
@@ -58,7 +65,9 @@ func (h *Handler) handleSyncNVD(w http.ResponseWriter, r *http.Request) {
 	if cveID != "" {
 		result, err = h.syncService.SyncNVDByCVE(r.Context(), cveID)
 	} else {
-		result, err = h.syncService.SyncNVD(r.Context())
+		ctx, cancel := longRunningSyncContext()
+		defer cancel()
+		result, err = h.syncService.SyncNVD(ctx)
 	}
 	if err != nil {
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
@@ -78,7 +87,7 @@ func (h *Handler) handleSyncAll(w http.ResponseWriter, r *http.Request) {
 		NVD models.SyncResult `json:"nvd"`
 	}
 
-	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Minute)
+	ctx, cancel := longRunningSyncContext()
 	defer cancel()
 
 	bduResult, bduErr := h.syncService.SyncBDU(ctx)

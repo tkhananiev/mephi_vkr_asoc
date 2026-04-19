@@ -26,7 +26,7 @@ func run(ctx context.Context, svc *service.SyncService, interval, initialDelay t
 		}
 	}
 	for {
-		runOnce(ctx, svc)
+		runOnce(svc)
 		select {
 		case <-ctx.Done():
 			return
@@ -35,8 +35,9 @@ func run(ctx context.Context, svc *service.SyncService, interval, initialDelay t
 	}
 }
 
-func runOnce(ctx context.Context, svc *service.SyncService) {
-	reqCtx, cancel := context.WithTimeout(ctx, 45*time.Minute)
+func runOnce(svc *service.SyncService) {
+	// Полная выгрузка NVD может занимать много часов (лимиты API); не обрывать через 6h.
+	reqCtx, cancel := context.WithTimeout(context.Background(), 168*time.Hour)
 	defer cancel()
 
 	log.Printf("scheduled sync: BDU start")

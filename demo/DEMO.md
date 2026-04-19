@@ -1,99 +1,108 @@
 # Demo Guide
 
-## Цель сценария
+Сервис справочников: **`reference-data-service`**, порт **8081** (в `deploy/docker-compose.yml`). Подставь вместо **`localhost`** свой хост, если вызываешь не с той же машины (например `45.87.246.170`).
 
-Показать сквозной поток:
+Во всех примерах ниже: метод **POST**, тела **нет** (в Postman: Body → none).
 
-`HTTP-клиент -> api-service -> semgrep-service (Semgrep) -> processing-service -> correlation with NVD/BDU -> vulnerability passport -> Jira ticket`
+---
 
-## Что нужно перед запуском
+## 1. Синхронизация баз БДУ и CVE (NVD)
 
-- Docker Desktop запущен
-- Папка проекта: `mephi_vkr_aspm`
-- Один раз клонировать **WebGoat** в `demo/scan-targets` (сканирование по умолчанию смотрит туда):
+**CVE** в системе приходят из **NVD** (REST API 2.0). **БДУ ФСТЭК** — отдельный источник (RSS-фид).
 
-  ```bash
-  ./demo/scan-targets/clone-webgoat.sh
-  ```
+### 1.1. БДУ ФСТЭК
 
-## Поднять стек
+| | |
+|--|--|
+| **Метод** | `POST` |
+| **URL** | `http://localhost:8081/api/v1/sync/bdu` |
 
-```bash
-cd mephi_vkr_aspm
-docker compose -f deploy/docker-compose.yml up -d --build
-```
-
-В compose для `api-service` и `processing-service` задан **`APP_KAFKA_BROKERS=kafka:9092`**: ingest находок идёт через топики **`aspm.findings.ingest`** / **`aspm.findings.ingest.result`** (см. `docs/ARCHITECTURE.md`). Без этой переменной `api-service` использует только HTTP `POST .../findings/ingest`.
-
-## Проверка здоровья сервисов
-
-```bash
-curl http://localhost:8080/health
-curl http://localhost:8081/health
-curl http://localhost:8082/health
-curl http://localhost:8083/health
-curl http://localhost:8085/health
-curl http://localhost:8090/health
-```
-
-Ожидаемый ответ:
-
-```json
-{"status":"ok"}
-```
-
-## Подготовка справочников
-
-### NVD по конкретному CVE
-
-```bash
-curl -X POST "http://localhost:8081/api/v1/sync/nvd?cve_id=CVE-2021-44228"
-```
-
-### БДУ ФСТЭК
+**curl:**
 
 ```bash
 curl -X POST "http://localhost:8081/api/v1/sync/bdu"
 ```
 
-Примечание:
-- в тестовом контуре БДУ может быть недоступен по сети или TLS;
-- в этом случае сервис использует демонстрационный fallback/seed, чтобы защитный сценарий всё равно отработал.
+**Postman:** New Request → POST → вставить URL → Send.
 
-## Основной запрос для предзащиты
+**Ответ при успехе:** `202 Accepted`, JSON с полями `source_code`, `run_id`, `items_discovered`, `items_processed`, …
 
-В compose для `api-service` заданы **`APP_DEFAULT_SCAN_TARGET_PATH`** (каталог WebGoat в контейнере semgrep) и **`APP_DEFAULT_SEMGREP_CONFIG=p/java`**, поэтому достаточно минимального тела:
+Если фид недоступен, сервис может отработать с **демонстрационной записью** (см. код адаптера БДУ).
+
+---
+
+### 1.2. NVD (CVE) — полная выгрузка каталога
+
+Запрос **без** `cve_id` обходит **все страницы** ответа NVD API 2.0 (до **2000** CVE на страницу, пока не исчерпан `totalResults`). Между запросами действует пауза по лимитам NVD (~5 запросов / 30 с без ключа; с ключом — быстрее).
+
+Переменные окружения `reference-data-service` (см. `docs/ENVIRONMENT.md`):
+
+- **`APP_NVD_API_KEY`** — необязательно; [ключ NVD](https://nvd.nist.gov/developers/request-an-api-key) в заголовке `apiKey`, выше лимит и короче полная синхронизация.
+- **`APP_NVD_PAGE_SIZE`** — размер страницы (по умолчанию **2000**, максимум NVD).
+- **`APP_NVD_MAX_PAGES`** — ограничить число страниц за один прогон (**0** = без ограничения). Для теста можно поставить `1`.
+
+Запрос может идти **десятки минут** и держит открытым HTTP-соединение; в Postman увеличь **timeout** (Settings → General).
+
+| | |
+|--|--|
+| **Метод** | `POST` |
+| **URL** | `http://localhost:8081/api/v1/sync/nvd` |
+
+**curl** (долгий запрос):
 
 ```bash
-curl -X POST "http://localhost:8080/api/v1/scans/semgrep" \
-  -H "Content-Type: application/json" \
-  -d '{"scanner_name":"semgrep"}'
+curl --max-time 0 -X POST "http://localhost:8081/api/v1/sync/nvd"
 ```
 
-Короткое демо на учебном Python (и явные пути в JSON):
+**Postman:** POST → URL как выше → Send (увеличить таймаут запроса).
+
+---
+
+### 1.3. NVD (CVE) — один конкретный идентификатор
+
+| | |
+|--|--|
+| **Метод** | `POST` |
+| **URL** | `http://localhost:8081/api/v1/sync/nvd?cve_id=CVE-2021-44228` |
+
+**curl:**
 
 ```bash
-curl -X POST "http://localhost:8080/api/v1/scans/semgrep" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "target_path": "/app/demo/vulnerable-app",
-    "scanner_name": "semgrep",
-    "semgrep_config": "/app/demo/semgrep-rules.yml"
-  }'
+curl -X POST "http://localhost:8081/api/v1/sync/nvd?cve_id=CVE-2021-44228"
 ```
 
-## Что должно получиться
+**Postman:** тот же URL в строке запроса; вкладка **Params**: ключ `cve_id`, значение `CVE-2021-44228` (или другой CVE).
 
-- `Semgrep` находит находки в коде цели (WebGoat — большой Java-проект; учебный `vulnerable-app` — один сценарий под `semgrep-rules.yml`)
-- finding уходит в `processing-service`
-- при наличии **CVE/CWE** в метаданных срабатывания — корреляция со справочником (для гарантированного сценария по **CWE-78** используйте запрос с `vulnerable-app` и локальным YAML выше)
-- создаётся `vulnerability group`
-- создаётся тикет в `jira-mock`
+---
 
-## Полезные запросы после прогона
+### 1.4. БДУ и NVD подряд (одним запросом)
+
+| | |
+|--|--|
+| **Метод** | `POST` |
+| **URL** | `http://localhost:8081/api/v1/sync/all` |
+
+**curl:**
+
+```bash
+curl -X POST "http://localhost:8081/api/v1/sync/all"
+```
+
+Полная синхронизация NVD может занять много времени; при необходимости вызывай **§1.1** и **§1.2** по отдельности вместо `sync/all`.
+
+---
+
+### 1.5. История прогонов синхронизации
+
+| | |
+|--|--|
+| **Метод** | `GET` |
+| **URL** | `http://localhost:8081/api/v1/sync/runs?limit=10` |
+
+**curl:**
 
 ```bash
 curl "http://localhost:8081/api/v1/sync/runs?limit=10"
-curl "http://localhost:8082/api/v1/groups?limit=10"
-curl "http://localhost:8090/health"
 ```
+
+**Postman:** GET → тот же URL.

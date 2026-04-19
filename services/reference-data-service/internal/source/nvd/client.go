@@ -1,6 +1,7 @@
 package nvd
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -12,19 +13,32 @@ import (
 	"mephi_vkr_aspm/services/reference-data-service/internal/models"
 )
 
+const (
+	maxResultsPerPageNVD = 2000
+	// NVD: без ключа ~5 запросов / 30 с; с ключом ~50 / 30 с.
+	throttleNoAPIKey   = 6 * time.Second
+	throttleWithAPIKey = 650 * time.Millisecond
+)
+
 type Client struct {
 	httpClient *http.Client
 	baseURL    string
+	apiKey     string
+	pageSize   int
+	maxPages   int // 0 = без ограничения (все страницы)
 }
 
 type apiResponse struct {
+	TotalResults    int `json:"totalResults"`
+	ResultsPerPage  int `json:"resultsPerPage"`
+	StartIndex      int `json:"startIndex"`
 	Vulnerabilities []struct {
 		CVE struct {
-			ID               string `json:"id"`
-			Published        string `json:"published"`
-			LastModified     string `json:"lastModified"`
-			VulnStatus       string `json:"vulnStatus"`
-			Descriptions     []struct {
+			ID           string `json:"id"`
+			Published    string `json:"published"`
+			LastModified string `json:"lastModified"`
+			VulnStatus   string `json:"vulnStatus"`
+			Descriptions []struct {
 				Lang  string `json:"lang"`
 				Value string `json:"value"`
 			} `json:"descriptions"`
@@ -42,10 +56,18 @@ type apiResponse struct {
 	} `json:"vulnerabilities"`
 }
 
-func New(baseURL string) *Client {
+// New создаёт клиент NVD API 2.0. apiKey — опционально (заголовок apiKey, выше лимит запросов).
+// pageSize — до 2000; maxPages — ограничение числа страниц за один вызов Fetch (0 = все).
+func New(baseURL, apiKey string, pageSize, maxPages int) *Client {
+	if pageSize <= 0 || pageSize > maxResultsPerPageNVD {
+		pageSize = maxResultsPerPageNVD
+	}
 	return &Client{
-		httpClient: &http.Client{Timeout: 45 * time.Second},
-		baseURL:    baseURL,
+		httpClient: &http.Client{Timeout: 120 * time.Second},
+		baseURL:    strings.TrimRight(baseURL, "?&"),
+		apiKey:     strings.TrimSpace(apiKey),
+		pageSize:   pageSize,
+		maxPages:   maxPages,
 	}
 }
 
@@ -58,14 +80,106 @@ func (c *Client) FetchByCVE(ctx context.Context, cveID string) ([]models.SourceR
 }
 
 func (c *Client) fetch(ctx context.Context, cveID string) ([]models.SourceRecord, error) {
-	url := c.baseURL + "?resultsPerPage=20"
 	if strings.TrimSpace(cveID) != "" {
-		url = c.baseURL + "?cveId=" + strings.TrimSpace(cveID)
+		return c.fetchSingleCVE(ctx, strings.TrimSpace(cveID))
+	}
+	return c.fetchAllPages(ctx)
+}
+
+func (c *Client) fetchSingleCVE(ctx context.Context, cveID string) ([]models.SourceRecord, error) {
+	url := fmt.Sprintf("%s?cveId=%s", c.baseURL, strings.TrimSpace(cveID))
+	payload, err := c.doGET(ctx, url)
+	if err != nil {
+		return nil, err
+	}
+	return c.recordsFromPayload(payload)
+}
+
+// SyncAllPages загружает все страницы NVD без накопления всего каталога в памяти (onPage вызывается на каждую страницу).
+func (c *Client) SyncAllPages(ctx context.Context, onPage func([]models.SourceRecord) error) error {
+	startIndex := 0
+	pageNum := 0
+
+	for {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+
+		url := fmt.Sprintf("%s?resultsPerPage=%d&startIndex=%d", c.baseURL, c.pageSize, startIndex)
+		payload, err := c.doGET(ctx, url)
+		if err != nil {
+			return err
+		}
+
+		chunk, err := c.recordsFromPayload(payload)
+		if err != nil {
+			return err
+		}
+
+		total := payload.TotalResults
+		debugLogNVD("H1", "nvd/client.go:SyncAllPages", "nvd_page", map[string]any{
+			"startIndex": startIndex, "totalResults": total, "resultsPerPage": payload.ResultsPerPage,
+			"chunkLen": len(chunk), "pageNum": pageNum, "pageSize": c.pageSize,
+		})
+
+		if len(chunk) > 0 {
+			if err := onPage(chunk); err != nil {
+				return err
+			}
+		}
+
+		if len(chunk) == 0 {
+			break
+		}
+
+		nextStart := startIndex + len(chunk)
+		var done bool
+		switch {
+		case total > 0:
+			done = nextStart >= total
+		case payload.ResultsPerPage > 0:
+			// При totalResults=0 в JSON не сравниваем nextStart >= total (иначе 20 >= 0 → ложный конец после первой страницы).
+			done = len(chunk) < payload.ResultsPerPage
+		default:
+			// Нет ни total, ни resultsPerPage — идём, пока не придёт пустой chunk.
+			done = false
+		}
+
+		if done {
+			break
+		}
+
+		startIndex = nextStart
+		pageNum++
+
+		if c.maxPages > 0 && pageNum >= c.maxPages {
+			break
+		}
+
+		if err := c.throttle(ctx); err != nil {
+			return err
+		}
 	}
 
+	return nil
+}
+
+func (c *Client) fetchAllPages(ctx context.Context) ([]models.SourceRecord, error) {
+	var all []models.SourceRecord
+	err := c.SyncAllPages(ctx, func(chunk []models.SourceRecord) error {
+		all = append(all, chunk...)
+		return nil
+	})
+	return all, err
+}
+
+func (c *Client) doGET(ctx context.Context, url string) (*apiResponse, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err
+	}
+	if c.apiKey != "" {
+		req.Header.Set("apiKey", c.apiKey)
 	}
 
 	resp, err := c.httpClient.Do(req)
@@ -75,7 +189,8 @@ func (c *Client) fetch(ctx context.Context, cveID string) ([]models.SourceRecord
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("nvd api returned status %d", resp.StatusCode)
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 2048))
+		return nil, fmt.Errorf("nvd api returned status %d: %s", resp.StatusCode, string(bytes.TrimSpace(body)))
 	}
 
 	body, err := io.ReadAll(resp.Body)
@@ -87,7 +202,10 @@ func (c *Client) fetch(ctx context.Context, cveID string) ([]models.SourceRecord
 	if err := json.Unmarshal(body, &payload); err != nil {
 		return nil, err
 	}
+	return &payload, nil
+}
 
+func (c *Client) recordsFromPayload(payload *apiResponse) ([]models.SourceRecord, error) {
 	records := make([]models.SourceRecord, 0, len(payload.Vulnerabilities))
 	for _, entry := range payload.Vulnerabilities {
 		cve := entry.CVE
@@ -103,6 +221,11 @@ func (c *Client) fetch(ctx context.Context, cveID string) ([]models.SourceRecord
 			"weaknesses":    cve.Weaknesses,
 		}
 
+		rawPayload, err := json.Marshal(entry)
+		if err != nil {
+			rawPayload = []byte("{}")
+		}
+
 		records = append(records, models.SourceRecord{
 			ExternalID:  cve.ID,
 			Title:       cve.ID,
@@ -116,12 +239,26 @@ func (c *Client) fetch(ctx context.Context, cveID string) ([]models.SourceRecord
 			Aliases: []models.ReferenceAlias{
 				{AliasType: "CVE", AliasValue: cve.ID},
 			},
-			RawPayload:  string(body),
+			RawPayload:  string(rawPayload),
 			ContentType: "application/json",
 		})
 	}
-
 	return records, nil
+}
+
+func (c *Client) throttle(ctx context.Context) error {
+	d := throttleNoAPIKey
+	if c.apiKey != "" {
+		d = throttleWithAPIKey
+	}
+	t := time.NewTimer(d)
+	defer t.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-t.C:
+		return nil
+	}
 }
 
 func firstDescription(items []struct {

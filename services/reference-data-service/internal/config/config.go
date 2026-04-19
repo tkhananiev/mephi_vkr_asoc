@@ -2,6 +2,7 @@ package config
 
 import (
 	"os"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -13,6 +14,9 @@ type Config struct {
 	BDUFeedURL            string
 	BDUInsecure           bool
 	NVDAPIBaseURL         string
+	NVDAPIKey             string
+	NVDPageSize           int
+	NVDMaxPages           int
 	SyncInterval          time.Duration
 	SyncSchedulerEnabled  bool
 	SyncInitialDelay      time.Duration
@@ -26,6 +30,9 @@ func Load() Config {
 		BDUFeedURL:           getEnv("APP_BDU_FEED_URL", "https://bdu.fstec.ru/feed"),
 		BDUInsecure:          getBool("APP_BDU_INSECURE_SKIP_VERIFY", true),
 		NVDAPIBaseURL:        getEnv("APP_NVD_API_BASE_URL", "https://services.nvd.nist.gov/rest/json/cves/2.0"),
+		NVDAPIKey:            getEnv("APP_NVD_API_KEY", ""),
+		NVDPageSize:          getInt("APP_NVD_PAGE_SIZE", 2000),
+		NVDMaxPages:          getInt("APP_NVD_MAX_PAGES", 0),
 		SyncInterval:         getDuration("APP_SYNC_INTERVAL", 24*time.Hour),
 		SyncSchedulerEnabled: getBool("APP_SYNC_SCHEDULER_ENABLED", true),
 		SyncInitialDelay:     getDuration("APP_SYNC_INITIAL_DELAY", time.Minute),
@@ -61,6 +68,18 @@ func splitCSV(value string) []string {
 		}
 	}
 	return result
+}
+
+func getInt(key string, fallback int) int {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return fallback
+	}
+	n, err := strconv.Atoi(value)
+	if err != nil {
+		return fallback
+	}
+	return n
 }
 
 func getBool(key string, fallback bool) bool {
