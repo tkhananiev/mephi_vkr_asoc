@@ -30,3 +30,6 @@ go.work.sum
 # Editor/IDE
 .idea/
 .vscode/
+
+# Клонируемые цели SAST (не коммитим)
+demo/scan-targets/WebGoat/

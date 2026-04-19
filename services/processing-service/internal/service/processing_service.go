@@ -62,6 +62,11 @@ func (s *ProcessingService) ProcessFindings(ctx context.Context, request models.
 		correlationStatus := "not_found"
 		if refID != nil {
 			correlationStatus = "matched_by_cve"
+		} else {
+			refID, _ = s.repo.FindReferenceRecordIDByCWE(ctx, strings.TrimSpace(item.CWE))
+			if refID != nil {
+				correlationStatus = "matched_by_cwe"
+			}
 		}
 
 		vulnerabilityID, inserted, err := s.repo.CreateVulnerability(ctx, models.Vulnerability{
@@ -141,6 +146,7 @@ func normalizeSeverity(value string) string {
 func buildGroupKey(item models.FindingDTO) string {
 	parts := []string{
 		strings.TrimSpace(item.CVE),
+		strings.TrimSpace(item.CWE),
 		strings.TrimSpace(item.Component),
 		strings.TrimSpace(item.Version),
 	}

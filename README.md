@@ -30,9 +30,9 @@ MVP-каркас сервиса управления уязвимостями д
   - запусков синхронизации
   - сырых записей
   - нормализованных справочных записей
-  - алиасов (`CVE`, и др.)
+  - алиасов (`CVE`, `CWE`, и др.)
 - прием находок в `processing-service` (HTTP и/или Kafka)
-- базовая корреляция по `CVE`
+- корреляция со справочником по `CVE` и/или по `CWE`
 - группировка в `vulnerability_groups`
 - запуск `Semgrep` через `api-service`
 - создание тикета через `jira-integration-service`
@@ -43,9 +43,9 @@ MVP-каркас сервиса управления уязвимостями д
 
 ```text
 Клиент (HTTP)
-  -> api-service (POST /api/v1/scans/semgrep)
+  -> api-service (POST /api/v1/scans/semgrep; по умолчанию цель WebGoat + p/java через APP_DEFAULT_*)
   -> semgrep-service (POST /api/v1/scan; Semgrep в отдельном контейнере)
-  -> api-service -> Kafka (aspm.findings.ingest) -> processing-service -> Kafka (aspm.findings.ingest.result); корреляция по CVE через PostgreSQL / catalog.* [или HTTP ingest без Kafka, если APP_KAFKA_BROKERS не задан]
+  -> api-service -> Kafka (aspm.findings.ingest) -> processing-service -> Kafka (aspm.findings.ingest.result); корреляция по CVE/CWE через PostgreSQL / catalog.* [или HTTP ingest без Kafka, если APP_KAFKA_BROKERS не задан]
   -> api-service -> GET groups -> POST /api/v1/tickets
   -> jira-integration-service -> jira-mock (на стенде)
 ```
@@ -53,6 +53,14 @@ MVP-каркас сервиса управления уязвимостями д
 Kafka в compose используется для **ingest находок** (`api-service` → топик → `processing-service` → топик ответа); подробности и noop для reference-data — в `docs/ARCHITECTURE.md`.
 
 ## Быстрый старт
+
+Перед первым сканированием по умолчанию (WebGoat) **один раз** на хосте:
+
+```bash
+./demo/scan-targets/clone-webgoat.sh
+```
+
+Поднять контейнеры:
 
 ```bash
 docker compose -f deploy/docker-compose.yml up -d --build
@@ -67,9 +75,11 @@ docker compose -f deploy/docker-compose.yml up -d --build
 - `jira-mock` — `http://localhost:8090`
 - `semgrep-service` — `http://localhost:8085`
 
-## Semgrep и «DVWA»
+## Semgrep и цели сканирования
 
-Semgrep выполняется в контейнере **`semgrep-service`**: по пути `target_path` в **этом** контейнере читаются **файлы исходников** (SAST), а не URL сайта. Каталог `demo/` монтируется в `semgrep-service` (`/app/demo/...`); чтобы сканировать код DVWA, клонируйте репозиторий в `demo/scan-targets/` на хосте и передайте в запросе `semgrep_config`, например `p/php`. Подробности: `demo/scan-targets/README.md`.
+Semgrep в контейнере **`semgrep-service`** читает **файлы** по `target_path` (путь **внутри этого контейнера**). Каталог `demo/` смонтирован как `/app/demo/...`.
+
+По умолчанию в compose для **`api-service`** заданы **`APP_DEFAULT_SCAN_TARGET_PATH=/app/demo/scan-targets/WebGoat`** и **`APP_DEFAULT_SEMGREP_CONFIG=p/java`**: перед первым прогоном выполните **`demo/scan-targets/clone-webgoat.sh`**. Альтернативы (DVWA, учебный `vulnerable-app`) — в `demo/scan-targets/README.md`.
 
 ## Demo-артефакты
 

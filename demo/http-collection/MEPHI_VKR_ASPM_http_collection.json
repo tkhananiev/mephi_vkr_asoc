@@ -1,6 +1,7 @@
 {
   "info": {
     "name": "MEPHI VKR ASPM Demo",
+    "description": "Перед Run Semgrep выполните demo/scan-targets/clone-webgoat.sh. При пустом target_path подставляются APP_DEFAULT_* (WebGoat + p/java).",
     "_postman_id": "c83f88a6-7d86-45f9-a5d2-0b7c6d67b6d2",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
@@ -52,6 +53,7 @@
     },
     {
       "name": "Run Semgrep Scenario",
+      "description": "Тело без target_path: подставятся APP_DEFAULT_SCAN_TARGET_PATH (WebGoat) и APP_DEFAULT_SEMGREP_CONFIG (p/java).",
       "request": {
         "method": "POST",
         "header": [
@@ -62,7 +64,7 @@
         ],
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"target_path\": \"/app/demo/vulnerable-app\",\n  \"scanner_name\": \"semgrep\"\n}"
+          "raw": "{\n  \"scanner_name\": \"semgrep\"\n}"
         },
         "url": {
           "raw": "http://localhost:8080/api/v1/scans/semgrep",

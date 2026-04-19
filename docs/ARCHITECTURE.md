@@ -9,7 +9,7 @@
 | `api-service` | Внешний HTTP API, оркестрация сценария (вызов `semgrep-service` → processing → группы → Jira) |
 | `semgrep-service` | Запуск Semgrep по HTTP (`POST /api/v1/scan`), пути к коду — внутри этого контейнера |
 | `reference-data-service` | Синхронизация справочников NVD и БДУ ФСТЭК, запись в БД |
-| `processing-service` | Приём находок (HTTP и/или Kafka), нормализация, корреляция по CVE, группировка |
+| `processing-service` | Приём находок (HTTP и/или Kafka), нормализация, корреляция по CVE/CWE, группировка |
 | `jira-integration-service` | Создание тикетов, идемпотентность, запись `ticket_links` |
 | `jira-mock` | Упрощённая имитация Jira REST для локального стенда |
 
@@ -29,18 +29,18 @@
 
 ## Ключевой принцип: корреляция через общую БД
 
-`reference-data-service` и `processing-service` **не вызывают друг друга по HTTP**. Справочники заполняются в таблицах схемы `catalog` (и связанных). `processing-service` при корреляции выполняет **SQL-запросы** к тем же таблицам (поиск записи по CVE / алиасу). Так снижается связность и не дублируется контракт «справочного» REST.
+`reference-data-service` и `processing-service` **не вызывают друг друга по HTTP**. Справочники заполняются в таблицах схемы `catalog` (и связанных). `processing-service` при корреляции выполняет **SQL-запросы** к тем же таблицам (поиск записи по алиасам CVE или CWE). Так снижается связность и не дублируется контракт «справочного» REST.
 
 ## Semgrep: что именно сканируется
 
-Semgrep установлен **в образе `semgrep-service`**. `api-service` вызывает его по **`APP_SEMGREP_SERVICE_URL`** (в compose — `http://semgrep-service:8085`). В теле сценария указываются **путь к каталогу с исходниками** (`target_path`, должен существовать в контейнере `semgrep-service`) и набор правил (`APP_SEMGREP_CONFIG` в сервисе сканера или поле `semgrep_config` в запросе к `api-service`). Это **SAST по файлам**, а не сканирование работающего веб-приложения по HTTP. Пример с исходниками DVWA: см. `demo/scan-targets/README.md`.
+Semgrep установлен **в образе `semgrep-service`**. `api-service` вызывает его по **`APP_SEMGREP_SERVICE_URL`** (в compose — `http://semgrep-service:8085`). В **`POST /api/v1/scans/semgrep`** задаются **`target_path`** и **`semgrep_config`**; если в JSON они пустые, **`api-service`** подставляет **`APP_DEFAULT_SCAN_TARGET_PATH`** и **`APP_DEFAULT_SEMGREP_CONFIG`** (в репозитории по умолчанию — **WebGoat** и **`p/java`**). Путь к коду — **внутри контейнера `semgrep-service`**. У **`semgrep-service`** в env задан **`APP_SEMGREP_CONFIG`**: он используется как **`--config`**, пока в вызов не передан другой **`semgrep_config`** (см. `internal/runner`). Это **SAST по файлам**, не HTTP-к сканирование. Цели на хосте: `demo/scan-targets/README.md`.
 
 ## Основной сценарий (защитный демо)
 
-1. Клиент вызывает `POST /api/v1/scans/semgrep` на `api-service`.
+1. Клиент вызывает `POST /api/v1/scans/semgrep` на `api-service` (при необходимости цель и правила берутся из **`APP_DEFAULT_*`**).
 2. `api-service` вызывает `POST /api/v1/scan` на `semgrep-service`, получает JSON Semgrep.
 3. `api-service` формирует ingest и передаёт его в **`processing-service`**: при настроенном Kafka — через топики **`aspm.findings.ingest` → `aspm.findings.ingest.result`**, иначе — **`POST /api/v1/findings/ingest`**.
-4. `processing-service` пишет находки и уязвимости, **читает `catalog.reference_*` из PostgreSQL** для сопоставления по CVE, выполняет группировку.
+4. `processing-service` пишет находки и уязвимости, **читает `catalog.reference_*` из PostgreSQL** для сопоставления по CVE или CWE, выполняет группировку.
 5. `api-service` запрашивает `GET /api/v1/groups` у `processing-service`, затем `POST /api/v1/tickets` у `jira-integration-service`.
 6. `jira-integration-service` обращается к Jira (на стенде — к `jira-mock`), сохраняет связь в `integration.ticket_links`.
 

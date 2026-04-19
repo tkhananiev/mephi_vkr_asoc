@@ -2,38 +2,38 @@
 
 ## Как это устроено
 
-Semgrep — **статический** анализатор: он читает **файлы исходного кода** по пути `target_path` внутри контейнера **`semgrep-service`** (каталог `demo/` с хоста смонтирован туда как `/app/demo`). Он **не** открывает URL в браузере и **не** является заменой DAST (ZAP, Burp) для «живого» DVWA на порту 80.
+Semgrep читает **файлы** по пути `target_path` **внутри контейнера `semgrep-service`**. На хосте это подкаталог `mephi_vkr_aspm/demo/...`, в контейнере — `/app/demo/...`. Это не DAST по URL.
 
-Поднятый как сервис **DVWA** (веб-форма, PHP в рантайме) для Semgrep значения не имеет, пока вы не дадите путь к **каталогу с исходниками** DVWA на диске.
+## OWASP WebGoat (основной сценарий в compose)
 
-## Демо по умолчанию
-
-В образ уже включён `demo/vulnerable-app` (Python) и правила `demo/semgrep-rules.yml` — так воспроизводится сквозной сценарий с корреляцией по CVE в учебных целях.
-
-## Сканирование исходников DVWA
-
-1. Клонируйте репозиторий DVWA **на хосте** в этот каталог:
+1. Один раз на хосте (из корня репозитория или из этой папки):
 
    ```bash
-   cd demo/scan-targets
-   git clone --depth 1 https://github.com/digininja/DVWA.git
+   ./demo/scan-targets/clone-webgoat.sh
    ```
 
-2. Перезапускать compose не обязательно: `../demo` смонтирован в `semgrep-service` как `/app/demo`, в том числе `scan-targets`.
+   Либо: `cd demo/scan-targets && git clone --depth 1 https://github.com/WebGoat/WebGoat.git`
 
-3. Вызовите API (набор правил `p/php` или `auto` подтягивает правила из реестра Semgrep; нужен исходящий интернет в контейнере при первом запуске):
+2. В `deploy/docker-compose.yml` у `api-service` заданы **`APP_DEFAULT_SCAN_TARGET_PATH=/app/demo/scan-targets/WebGoat`** и **`APP_DEFAULT_SEMGREP_CONFIG=p/java`**. Достаточно вызвать `POST /api/v1/scans/semgrep` с телом, например `{"scanner_name":"semgrep"}` (без `target_path` — подставится из env).
 
-   ```json
-   {
-     "target_path": "/app/demo/scan-targets/DVWA",
-     "scanner_name": "semgrep",
-     "semgrep_config": "p/php"
-   }
-   ```
+3. Первый запуск `p/java` может тянуть правила из реестра Semgrep — нужен исходящий интернет в контейнере `semgrep-service`.
 
-   Либо `semgrep_config`: `auto` для смешанных проектов (медленнее, больше правил).
+Каталог **`WebGoat/`** в git не хранится (см. `.gitignore` в корне репозитория); перед сканом выполните **`clone-webgoat.sh`** в этой папке.
+
+## Учебный `vulnerable-app` (короткое демо)
+
+В репозитории есть `mephi_vkr_aspm/demo/vulnerable-app` (Python) и `demo/semgrep-rules.yml`. Пример пути в контейнере: `/app/demo/vulnerable-app`, при необходимости укажите `semgrep_config` под ваши правила.
+
+## DVWA (PHP)
+
+```bash
+cd demo/scan-targets
+git clone --depth 1 https://github.com/digininja/DVWA.git
+```
+
+В запросе: `"target_path": "/app/demo/scan-targets/DVWA"`, `"semgrep_config": "p/php"` (или `auto`).
 
 ## Важно
 
-- Корреляция с NVD/БДУ в прототипе завязана на поле **CVE** в метаданных находки; у большинства срабатываний `p/php` **CVE может не быть** — тогда цепочка «CVE → справочник» не сработает, но сами находки в `processing-service` попадут.
-- Для защиты можно комбинировать: **короткий** сценарий на `vulnerable-app` (с CVE) и **отдельно** показать скан DVWA как иллюстрацию SAST по реальному коду.
+- Корреляция со справочником в прототипе — по **CVE** и/или **CWE** в метаданных находки; у произвольных правил реестра поля может не быть.
+- Для защиты можно комбинировать короткий прогон на `vulnerable-app` и отдельно полный репозиторий (WebGoat/DVWA).

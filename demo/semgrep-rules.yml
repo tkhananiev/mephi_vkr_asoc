@@ -7,6 +7,5 @@ rules:
     patterns:
       - pattern: subprocess.run(..., shell=True, ...)
     metadata:
-      cve: CVE-2021-44228
       cwe:
         - CWE-78

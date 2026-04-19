@@ -11,6 +11,7 @@ type ProcessingRepository interface {
 	FinishRun(ctx context.Context, runID int64, status string, result models.ProcessingResult, errMsg *string) error
 	InsertFinding(ctx context.Context, finding models.Finding) (int64, error)
 	FindReferenceRecordIDByCVE(ctx context.Context, cve string) (*int64, error)
+	FindReferenceRecordIDByCWE(ctx context.Context, cwe string) (*int64, error)
 	CreateVulnerability(ctx context.Context, vulnerability models.Vulnerability) (int64, bool, error)
 	LinkFindingToVulnerability(ctx context.Context, findingID, vulnerabilityID int64) error
 	UpsertGroup(ctx context.Context, groupKey, severity, groupingRule string) (int64, bool, error)

@@ -1,0 +1,16 @@
+%% Кто пишет и кто читает топики (реальный Kafka I/O в коде).
+%% reference-data-service: NoopPublisher — только лог, брокер не используется.
+
+flowchart TB
+  subgraph kafka_topics["Топики"]
+    ING["aspm.findings.ingest"]
+    RES["aspm.findings.ingest.result"]
+  end
+  API["api-service"]
+  PR["processing-service"]
+  RD["reference-data-service<br/>(нет producer/consumer)"]
+
+  API -->|"write"| ING
+  ING -->|"read, group processing-findings-ingest"| PR
+  PR -->|"write"| RES
+  RES -->|"read, reply по correlation_id"| API

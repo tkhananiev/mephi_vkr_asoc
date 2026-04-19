@@ -93,6 +93,8 @@ services:
       APP_JIRA_SERVICE_URL: http://jira-integration-service:8083
       APP_SEMGREP_SERVICE_URL: http://semgrep-service:8085
       APP_KAFKA_BROKERS: kafka:9092
+      APP_DEFAULT_SCAN_TARGET_PATH: /app/demo/scan-targets/WebGoat
+      APP_DEFAULT_SEMGREP_CONFIG: p/java
     depends_on:
       - kafka
       - processing-service

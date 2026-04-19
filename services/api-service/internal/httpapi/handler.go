@@ -3,17 +3,24 @@ package httpapi
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 
 	"mephi_vkr_aspm/services/api-service/internal/models"
 	"mephi_vkr_aspm/services/api-service/internal/service"
 )
 
 type Handler struct {
-	orchestrator *service.Orchestrator
+	orchestrator           *service.Orchestrator
+	defaultScanTargetPath  string
+	defaultSemgrepConfig     string
 }
 
-func New(orchestrator *service.Orchestrator) *Handler {
-	return &Handler{orchestrator: orchestrator}
+func New(orchestrator *service.Orchestrator, defaultScanTargetPath, defaultSemgrepConfig string) *Handler {
+	return &Handler{
+		orchestrator:          orchestrator,
+		defaultScanTargetPath: defaultScanTargetPath,
+		defaultSemgrepConfig:    defaultSemgrepConfig,
+	}
 }
 
 func (h *Handler) Register(mux *http.ServeMux) {
@@ -38,6 +45,16 @@ func (h *Handler) handleSemgrepScan(w http.ResponseWriter, r *http.Request) {
 	}
 	if request.ScannerName == "" {
 		request.ScannerName = "semgrep"
+	}
+	if strings.TrimSpace(request.TargetPath) == "" {
+		request.TargetPath = h.defaultScanTargetPath
+	}
+	if strings.TrimSpace(request.SemgrepConfig) == "" {
+		request.SemgrepConfig = h.defaultSemgrepConfig
+	}
+	if strings.TrimSpace(request.TargetPath) == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "target_path required (or set APP_DEFAULT_SCAN_TARGET_PATH)"})
+		return
 	}
 
 	passport, err := h.orchestrator.RunSemgrepScenario(r.Context(), request)

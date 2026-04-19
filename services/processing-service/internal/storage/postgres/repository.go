@@ -73,6 +73,44 @@ func (r *Repository) FindReferenceRecordIDByCVE(ctx context.Context, cve string)
 	return &id, nil
 }
 
+func (r *Repository) FindReferenceRecordIDByCWE(ctx context.Context, cwe string) (*int64, error) {
+	cwe = normalizeCWEAliasValue(cwe)
+	if cwe == "" {
+		return nil, nil
+	}
+	var id int64
+	err := r.pool.QueryRow(ctx, `
+		SELECT rr.id
+		FROM catalog.reference_records rr
+		JOIN catalog.reference_aliases ra ON ra.reference_record_id = rr.id
+		WHERE ra.alias_type = 'CWE' AND ra.alias_value = $1
+		ORDER BY rr.updated_at DESC
+		LIMIT 1
+	`, cwe).Scan(&id)
+	if err != nil {
+		return nil, nil
+	}
+	return &id, nil
+}
+
+// normalizeCWEAliasValue приводит к виду CWE-<id> для сопоставления с catalog.reference_aliases.
+func normalizeCWEAliasValue(raw string) string {
+	s := strings.TrimSpace(raw)
+	if s == "" {
+		return ""
+	}
+	u := strings.ToUpper(s)
+	if strings.HasPrefix(u, "CWE-") {
+		return u
+	}
+	for _, r := range s {
+		if r < '0' || r > '9' {
+			return ""
+		}
+	}
+	return "CWE-" + u
+}
+
 func (r *Repository) CreateVulnerability(ctx context.Context, vulnerability models.Vulnerability) (int64, bool, error) {
 	var (
 		id int64
