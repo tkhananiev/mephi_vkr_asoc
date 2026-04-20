@@ -1,9 +1,11 @@
 package app
 
 import (
+	"fmt"
 	"log"
 	"net/http"
 
+	"mephi_vkr_aspm/services/jira-mock/internal/config"
 	"mephi_vkr_aspm/services/jira-mock/internal/httpapi"
 )
 
@@ -11,14 +13,14 @@ type App struct {
 	server *http.Server
 }
 
-func New() *App {
+func New(cfg config.Config) *App {
 	mux := http.NewServeMux()
-	handler := httpapi.New()
+	handler := httpapi.New(cfg.PublicIssueBase)
 	handler.Register(mux)
 
 	return &App{
 		server: &http.Server{
-			Addr:    ":8090",
+			Addr:    fmt.Sprintf(":%s", cfg.HTTPPort),
 			Handler: mux,
 		},
 	}

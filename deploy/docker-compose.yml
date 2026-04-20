@@ -127,6 +127,9 @@ services:
     container_name: mephi-vkr-jira-mock
     working_dir: /app/services/jira-mock
     command: sh -c "go run ./cmd/jira-mock"
+    environment:
+      # Ссылки в ответе API (и в БД): подставь публичный URL хоста, иначе localhost
+      APP_JIRA_PUBLIC_BASE_URL: ${JIRA_PUBLIC_BASE_URL:-http://localhost:8090}
     volumes:
       - ..:/app
     ports:

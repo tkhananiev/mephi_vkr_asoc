@@ -99,4 +99,12 @@
 
 ## `jira-mock`
 
-Переменных окружения нет: порт **`8090`** зашит в `services/jira-mock/internal/app/app.go` (`:8090`).
+Файл: `services/jira-mock/internal/config/config.go`. В `deploy/docker-compose.yml` для публичных ссылок: **`JIRA_PUBLIC_BASE_URL`** на хосте (подставляется в `APP_JIRA_PUBLIC_BASE_URL`).
+
+| Переменная | Назначение |
+|------------|------------|
+| `APP_HTTP_PORT` | Порт сервера (по умолчанию `8090`). |
+| `APP_JIRA_PUBLIC_BASE_URL` | База для поля `self` при создании issue: `{base}/browse/{KEY}` — для VPS задай **http://ваш-ip:8090**, иначе по умолчанию `http://localhost:8090`. |
+
+- **`GET /console`** — список всех тикетов, созданных в этом процессе mock (память; после перезапуска контейнера список пустой).
+- **`GET /browse/ASPM-N`** — карточка задачи (ссылка с `/console` или из поля `self` в API).

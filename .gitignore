@@ -33,3 +33,6 @@ go.work.sum
 
 # Клонируемые цели SAST (не коммитим)
 demo/scan-targets/WebGoat/
+
+# Сценарий видео с реальным IP стенда — только локально
+demo/VIDEO_SCRIPT.md
