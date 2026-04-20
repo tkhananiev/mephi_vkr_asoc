@@ -28,7 +28,7 @@ func Load() Config {
 		HTTPPort:             getEnv("APP_HTTP_PORT", "8081"),
 		PostgresDSN:          getEnv("APP_POSTGRES_DSN", "postgres://aspm:aspm@localhost:5432/aspm?sslmode=disable"),
 		KafkaBrokers:         splitCSV(getEnv("APP_KAFKA_BROKERS", "localhost:9092")),
-		BDUFeedURL:           getEnv("APP_BDU_FEED_URL", "https://bdu.fstec.ru/feed"),
+		BDUFeedURL:           getEnv("APP_BDU_FEED_URL", "https://bdu.fstec.ru/ubi/vul/rss"),
 		BDUInsecure:          getBool("APP_BDU_INSECURE_SKIP_VERIFY", true),
 		BDURootCAFile:        getEnv("APP_BDU_ROOT_CA_FILE", ""),
 		NVDAPIBaseURL:        getEnv("APP_NVD_API_BASE_URL", "https://services.nvd.nist.gov/rest/json/cves/2.0"),

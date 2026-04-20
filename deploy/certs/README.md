@@ -1,9 +1,11 @@
-# Сертификаты для TLS к фиду БДУ ФСТЭК
+# Сертификаты Russian Trusted (опционально)
 
-Файлы **Russian Trusted** (корневой + выпускающий УЦ Минцифры), нормализованные PEM. Источник при сборке каталога: публичные URL `https://gu-st.ru/content/lending/russian_trusted_*_ca_pem.crt` (тот же набор, что раздаётся с портала Госуслуг).
+Файлы **Russian Trusted** (корневой + выпускающий УЦ Минцифры), нормализованные PEM. Источник при сборке: `https://gu-st.ru/content/lending/russian_trusted_*_ca_pem.crt`.
 
-- `russian_trusted_chain.pem` — корень + sub в одном файле (использует `reference-data-service` через `APP_BDU_ROOT_CA_FILE`).
-- Отдельные файлы `russian_trusted_root.pem`, `russian_trusted_sub.pem` — для ручной проверки или обновления.
+**В compose по умолчанию** для БДУ включён `APP_BDU_INSECURE_SKIP_VERIFY=true`: у ФСТЭК подпись листа может идти промежуточным сертификатом **другой** выдачи, чем в этой цепочке, из‑за чего OpenSSL даёт `authority and subject key identifier mismatch`. Плюс часть площадок отдаёт **403** клиентам без браузерного `User-Agent` (в коде БДУ-клиента задан обычный Chrome UA).
+
+- `russian_trusted_chain.pem` — для ручного `curl --cacert` или эксперимента с `APP_BDU_ROOT_CA_FILE` после обновления sub с [CDP НУЦ](https://nuc-cdp.digital.gov.ru/) под актуальный лист.
+- Отдельные `russian_trusted_root.pem`, `russian_trusted_sub.pem` — см. ниже обновление.
 
 ## Обновление цепочки (на машине с доступом в интернет)
 

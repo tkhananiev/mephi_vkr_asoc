@@ -40,16 +40,13 @@ services:
       APP_HTTP_PORT: "8081"
       APP_POSTGRES_DSN: postgres://aspm:aspm@postgres:5432/aspm?sslmode=disable
       APP_KAFKA_BROKERS: kafka:9092
-      APP_BDU_FEED_URL: https://bdu.fstec.ru/feed
-      # Цепочка Russian Trusted (корень + выпускающий) лежит в репозитории deploy/certs — без ручной загрузки с Госуслуг.
-      APP_BDU_ROOT_CA_FILE: /etc/ssl/bdu/russian_trusted_chain.pem
-      APP_BDU_INSECURE_SKIP_VERIFY: "false"
+      APP_BDU_FEED_URL: https://bdu.fstec.ru/ubi/vul/rss
+      # Строгая проверка с deploy/certs часто ломается (ротация Sub CA → AKI/SKI mismatch). Для фида БДУ надёжнее пропуск проверки TLS.
+      APP_BDU_INSECURE_SKIP_VERIFY: "true"
       APP_NVD_API_BASE_URL: https://services.nvd.nist.gov/rest/json/cves/2.0
       APP_SYNC_SCHEDULER_ENABLED: "true"
       APP_SYNC_INITIAL_DELAY: 1m
       APP_SYNC_INTERVAL: 24h
-    volumes:
-      - ./certs:/etc/ssl/bdu:ro
     depends_on:
       - postgres
       - kafka

@@ -39,6 +39,9 @@ type rssItem struct {
 var bduIDPattern = regexp.MustCompile(`BDU:\d+`)
 var cvePattern = regexp.MustCompile(`CVE-\d{4}-\d+`)
 
+// bduFeedUserAgent ФСТЭК и ряд госсайтов отдают 403 на дефолтный Go-http-client.
+const bduFeedUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+
 // New создаёт клиент БДУ. skipTLSVerify — пропуск проверки сертификата (нужно, если УЦ ФСТЭК нет в системном хранилище).
 // rootCAPEMPath — путь к PEM с дополнительным корневым/промежуточным УЦ; если не пусто, используется доверенный пул вместо skipTLSVerify.
 func New(feedURL string, skipTLSVerify bool, rootCAPEMPath string) (*Client, error) {
@@ -80,33 +83,72 @@ func bduTLSConfig(skipTLSVerify bool, rootCAPEMPath string) (*tls.Config, error)
 }
 
 func (c *Client) Fetch(ctx context.Context) ([]models.SourceRecord, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.feedURL, nil)
-	if err != nil {
-		return nil, err
+	for _, u := range bduFeedURLsToTry(c.feedURL) {
+		if rec, ok := c.fetchRSSFromURL(ctx, u); ok {
+			return rec, nil
+		}
 	}
+	return c.demoFallbackRecord(), nil
+}
+
+// bduFeedURLsToTry сначала конфиг, затем автозамена /feed → /ubi/vul/rss для старых деплоев.
+func bduFeedURLsToTry(primary string) []string {
+	u := strings.TrimSpace(primary)
+	if u == "" {
+		return nil
+	}
+	out := []string{u}
+	if alt := bduFSTECVulRSSFallback(u); alt != "" && alt != u {
+		out = append(out, alt)
+	}
+	return out
+}
+
+// bduFSTECVulRSSFallback /feed на bdu.fstec.ru — HTML-список каналов; лента уязвимостей — /ubi/vul/rss.
+func bduFSTECVulRSSFallback(feedURL string) string {
+	if !strings.Contains(feedURL, "bdu.fstec.ru") {
+		return ""
+	}
+	if strings.Contains(feedURL, "/ubi/vul/rss") {
+		return ""
+	}
+	u := strings.TrimSuffix(strings.TrimSpace(feedURL), "/")
+	if strings.HasSuffix(u, "/feed") {
+		return strings.TrimSuffix(u, "/feed") + "/ubi/vul/rss"
+	}
+	return ""
+}
+
+func (c *Client) fetchRSSFromURL(ctx context.Context, feedURL string) ([]models.SourceRecord, bool) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, feedURL, nil)
+	if err != nil {
+		return nil, false
+	}
+	req.Header.Set("User-Agent", bduFeedUserAgent)
+	req.Header.Set("Accept", "application/rss+xml, application/xml, text/xml, */*;q=0.8")
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return c.demoFallbackRecord(), nil
+		return nil, false
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 300 {
-		return c.demoFallbackRecord(), nil
+		return nil, false
 	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return c.demoFallbackRecord(), nil
+		return nil, false
 	}
 
 	if !looksLikeXML(body) {
-		return c.demoFallbackRecord(), nil
+		return nil, false
 	}
 
 	var feed rssFeed
 	if err := xml.Unmarshal(body, &feed); err != nil {
-		return c.demoFallbackRecord(), nil
+		return nil, false
 	}
 
 	records := make([]models.SourceRecord, 0, len(feed.Channel.Items))
@@ -137,7 +179,7 @@ func (c *Client) Fetch(ctx context.Context) ([]models.SourceRecord, error) {
 		})
 	}
 
-	return records, nil
+	return records, true
 }
 
 func (c *Client) demoFallbackRecord() []models.SourceRecord {

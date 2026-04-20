@@ -45,9 +45,9 @@
 | `APP_HTTP_PORT` | `8081` | `8081` |
 | `APP_POSTGRES_DSN` | `postgres://aspm:aspm@postgres:5432/aspm?sslmode=disable` | `postgres://aspm:aspm@localhost:5432/aspm?sslmode=disable` |
 | `APP_KAFKA_BROKERS` | `kafka:9092` | `localhost:9092` |
-| `APP_BDU_FEED_URL` | `https://bdu.fstec.ru/feed` | то же |
-| `APP_BDU_ROOT_CA_FILE` | `/etc/ssl/bdu/russian_trusted_chain.pem` (том `deploy/certs`) | _(пусто)_; PEM с корнем и sub Russian Trusted |
-| `APP_BDU_INSECURE_SKIP_VERIFY` | `false` при смонтированной цепочке | `true`; если задан `APP_BDU_ROOT_CA_FILE`, проверка идёт через него + системный пул |
+| `APP_BDU_FEED_URL` | `https://bdu.fstec.ru/ubi/vul/rss` | RSS 2.0 ленты уязвимостей. Путь `/feed` отдаёт HTML «список каналов»; если в конфиге остался `.../feed`, клиент после неуспешного разбора XML сам пробует `.../ubi/vul/rss` (только `bdu.fstec.ru`) |
+| `APP_BDU_ROOT_CA_FILE` | — | _(пусто)_; опционально PEM (корень+sub); при ротации УЦ может не совпасть с листом ФСТЭК |
+| `APP_BDU_INSECURE_SKIP_VERIFY` | `true` | `true`; надёжный режим для фида БДУ при смене промежуточных сертификатов |
 | `APP_NVD_API_BASE_URL` | `https://services.nvd.nist.gov/rest/json/cves/2.0` | то же |
 | `APP_NVD_API_KEY` | — | _(пусто)_; ключ NVD для более высокого лимита запросов |
 | `APP_NVD_PAGE_SIZE` | — | `2000` |
