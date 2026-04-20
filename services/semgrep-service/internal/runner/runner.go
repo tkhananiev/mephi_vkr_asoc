@@ -1,6 +1,7 @@
 package runner
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -35,10 +36,11 @@ func (r *Runner) Run(ctx context.Context, targetPath, configOverride string) ([]
 		}
 		return nil, fmt.Errorf("semgrep output does not contain json payload: %s", string(output))
 	}
-	payload := output[jsonStart:]
-
-	var probe map[string]json.RawMessage
-	if err := json.Unmarshal(payload, &probe); err != nil {
+	// Semgrep иногда дописывает после JSON предупреждения/ANSI — читаем ровно одно JSON-значение.
+	dec := json.NewDecoder(bytes.NewReader(output[jsonStart:]))
+	dec.UseNumber()
+	var payload json.RawMessage
+	if err := dec.Decode(&payload); err != nil {
 		if cmdErr != nil {
 			return nil, fmt.Errorf("semgrep: %w; output=%s", cmdErr, string(output))
 		}
