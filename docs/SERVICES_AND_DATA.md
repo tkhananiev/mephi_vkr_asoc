@@ -1,6 +1,6 @@
 # Сервисы, данные и Kafka
 
-Сводка по MVP `mephi_vkr_aspm`: кто что вызывает, куда пишет и читает. База — один PostgreSQL (`aspm`), миграции в `migrations/`. Подробное описание таблиц и полей: [`docs/DATABASE.md`](DATABASE.md).
+Сводные таблицы для `mephi_vkr_aspm`: вызовы между сервисами, схемы PostgreSQL и топики Kafka. За **связным текстом** про микросервисы, диаграммами и сценарием см. [`ARCHITECTURE.md`](ARCHITECTURE.md). Одна БД PostgreSQL (`aspm`), миграции в `migrations/`. Детализация полей таблиц: [`DATABASE.md`](DATABASE.md).
 
 ---
 

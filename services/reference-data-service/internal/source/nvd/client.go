@@ -58,12 +58,16 @@ type apiResponse struct {
 
 // New создаёт клиент NVD API 2.0. apiKey — опционально (заголовок apiKey, выше лимит запросов).
 // pageSize — до 2000; maxPages — ограничение числа страниц за один вызов Fetch (0 = все).
-func New(baseURL, apiKey string, pageSize, maxPages int) *Client {
+// requestTimeout — лимит на один HTTP-запрос (чтение тела до 2000 CVE может занимать минуты).
+func New(baseURL, apiKey string, pageSize, maxPages int, requestTimeout time.Duration) *Client {
 	if pageSize <= 0 || pageSize > maxResultsPerPageNVD {
 		pageSize = maxResultsPerPageNVD
 	}
+	if requestTimeout <= 0 {
+		requestTimeout = 15 * time.Minute
+	}
 	return &Client{
-		httpClient: &http.Client{Timeout: 120 * time.Second},
+		httpClient: &http.Client{Timeout: requestTimeout},
 		baseURL:    strings.TrimRight(baseURL, "?&"),
 		apiKey:     strings.TrimSpace(apiKey),
 		pageSize:   pageSize,

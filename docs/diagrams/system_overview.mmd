@@ -1,0 +1,40 @@
+%% Общая схема контуров: сканирование, Kafka, справочники, БД.
+%% Рендер: Mermaid в GitHub / VS Code / docs/ARCHITECTURE.md
+
+flowchart TB
+  subgraph ext["Внешний мир"]
+    U[Клиент / Postman / web]
+  end
+  subgraph scan["Сканирование и тикеты"]
+    API["api-service :8080"]
+    SEM["semgrep-service :8085"]
+    K["Kafka :9092<br/>ingest / ingest.result"]
+    PROC["processing-service :8082"]
+    JINT["jira-integration-service :8083"]
+    MOCK["jira-mock :8090"]
+  end
+  DB[("PostgreSQL :5432<br/>aspm")]
+  subgraph ref["Справочник CVE / БДУ"]
+    REF["reference-data-service :8081"]
+    NVD["БДУ / NVD HTTPS"]
+  end
+
+  U -->|POST /api/v1/scans/semgrep| API
+  API -->|POST /api/v1/scan| SEM
+  SEM -->|JSON находок| API
+
+  API -->|если APP_KAFKA_BROKERS| K
+  K -->|consume ingest| PROC
+  PROC -->|produce result| K
+  K -->|consume result| API
+  API -.->|иначе POST /api/v1/findings/ingest| PROC
+
+  PROC -->|core.* читает catalog.*| DB
+  API -->|GET /api/v1/groups| PROC
+  API -->|POST /api/v1/tickets| JINT
+  JINT -->|REST| MOCK
+  JINT -->|ticket_links| DB
+
+  U -->|POST /api/v1/sync/…| REF
+  REF --> NVD
+  REF -->|catalog, raw, audit| DB

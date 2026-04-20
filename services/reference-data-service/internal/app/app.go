@@ -43,7 +43,7 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 		repo,
 		publisher,
 		bduClient,
-		nvd.New(cfg.NVDAPIBaseURL, cfg.NVDAPIKey, cfg.NVDPageSize, cfg.NVDMaxPages),
+		nvd.New(cfg.NVDAPIBaseURL, cfg.NVDAPIKey, cfg.NVDPageSize, cfg.NVDMaxPages, cfg.NVDHTTPRequestTimeout),
 	)
 
 	mux := http.NewServeMux()

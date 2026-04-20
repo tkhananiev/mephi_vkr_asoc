@@ -36,3 +36,7 @@ demo/scan-targets/WebGoat/
 
 # Сценарий видео с реальным IP стенда — только локально
 demo/VIDEO_SCRIPT.md
+
+# Frontend (Vite)
+web/node_modules/
+web/dist/

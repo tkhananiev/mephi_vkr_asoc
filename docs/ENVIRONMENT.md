@@ -52,6 +52,7 @@
 | `APP_NVD_API_KEY` | — | _(пусто)_; ключ NVD для более высокого лимита запросов |
 | `APP_NVD_PAGE_SIZE` | — | `2000` |
 | `APP_NVD_MAX_PAGES` | — | `0` (= все страницы); иначе ограничение числа страниц за один `POST /sync/nvd` |
+| `APP_NVD_HTTP_REQUEST_TIMEOUT` | — | Таймаут **одного** HTTP GET к NVD (например `20m`). По умолчанию **15m**; раньше было 120s — при полном синке и большой странице возможна ошибка `context deadline exceeded`. |
 | `APP_SYNC_SCHEDULER_ENABLED` | `true` | `true` |
 | `APP_SYNC_INITIAL_DELAY` | `1m` | `1m` |
 | `APP_SYNC_INTERVAL` | `24h` | `24h` |

@@ -1,18 +1,19 @@
 # mephi_vkr_aspm
 
-MVP-каркас сервиса управления уязвимостями для ВКР: **для защиты достаточно текущего backend-контура** (REST, compose, демо по `demo/DEMO.md`). Отдельный браузерный UI не является частью объёма прототипа.
+MVP для управления уязвимостями: микросервисы на Go, общая PostgreSQL, Kafka для асинхронного ingest находок, сценарий сканирования Semgrep и постановки тикетов в Jira (на стенде — мок). Запуск backend: `deploy/docker-compose.yml`. Браузерный клиент — **`web/`** (React + Vite), вызывает те же REST API, что и сценарии в `demo/DEMO.md`. Дополнительно сценарий можно проходить через `curl`/Postman и при необходимости смотреть таблицы в PostgreSQL.
 
-Архитектура, Kafka и **перспективы развития** (UI, Swagger, auth) — в [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). Сводка сервисов и таблиц БД — [`docs/SERVICES_AND_DATA.md`](docs/SERVICES_AND_DATA.md).
+Повествование по архитектуре, потокам и Kafka: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). Сводные таблицы сервисов и схем данных: [`docs/SERVICES_AND_DATA.md`](docs/SERVICES_AND_DATA.md).
 
 ## Текущий состав
 
-- `services/api-service` — внешний API и orchestration защитного сценария
+- `services/api-service` — внешний API и оркестрация сквозного сценария
 - `services/reference-data-service` — синхронизация справочников `NVD/CVE` и `БДУ ФСТЭК`
 - `services/processing-service` — нормализация, корреляция и группировка находок
 - `services/jira-integration-service` — создание/обновление тикетов и `ticket_link`
 - `services/jira-mock` — тестовый Jira-контур для локального smoke-теста
 - `services/semgrep-service` — HTTP-обёртка над Semgrep (SAST), отдельный контейнер
 - `migrations` — инициализация схем `catalog`, `audit`, `raw`
+- `web/` — веб-интерфейс (дашборд, скан, группы, синхронизация справочников)
 - `deploy/docker-compose.yml` — локальный контур backend MVP
 
 ## Что уже реализовано
@@ -39,7 +40,7 @@ MVP-каркас сервиса управления уязвимостями д
 - тестовый Jira через `jira-mock`
 - демонстрационный seed для устойчивого корреляционного сценария
 
-## Защитный сценарий
+## Сквозной демо-сценарий
 
 ```text
 Клиент (HTTP)

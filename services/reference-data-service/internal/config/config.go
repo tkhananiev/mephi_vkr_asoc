@@ -18,6 +18,7 @@ type Config struct {
 	NVDAPIKey             string
 	NVDPageSize           int
 	NVDMaxPages           int
+	NVDHTTPRequestTimeout time.Duration // один GET к NVD (большие страницы / медленная сеть)
 	SyncInterval          time.Duration
 	SyncSchedulerEnabled  bool
 	SyncInitialDelay      time.Duration
@@ -33,8 +34,9 @@ func Load() Config {
 		BDURootCAFile:        getEnv("APP_BDU_ROOT_CA_FILE", ""),
 		NVDAPIBaseURL:        getEnv("APP_NVD_API_BASE_URL", "https://services.nvd.nist.gov/rest/json/cves/2.0"),
 		NVDAPIKey:            getEnv("APP_NVD_API_KEY", ""),
-		NVDPageSize:          getInt("APP_NVD_PAGE_SIZE", 2000),
-		NVDMaxPages:          getInt("APP_NVD_MAX_PAGES", 0),
+		NVDPageSize:           getInt("APP_NVD_PAGE_SIZE", 2000),
+		NVDMaxPages:           getInt("APP_NVD_MAX_PAGES", 0),
+		NVDHTTPRequestTimeout: getDuration("APP_NVD_HTTP_REQUEST_TIMEOUT", 15*time.Minute),
 		SyncInterval:         getDuration("APP_SYNC_INTERVAL", 24*time.Hour),
 		SyncSchedulerEnabled: getBool("APP_SYNC_SCHEDULER_ENABLED", true),
 		SyncInitialDelay:     getDuration("APP_SYNC_INITIAL_DELAY", time.Minute),
