@@ -1,8 +1,8 @@
 # mephi_vkr_aspm
 
-MVP-каркас сервиса управления уязвимостями для ВКР.
+MVP-каркас сервиса управления уязвимостями для ВКР: **для защиты достаточно текущего backend-контура** (REST, compose, демо по `demo/DEMO.md`). Отдельный браузерный UI не является частью объёма прототипа.
 
-Подробное описание **фактического взаимодействия микросервисов**, корреляции через общую БД, Kafka-ingest и отличий от планируемого контура (React, Swagger, auth) — в [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+Архитектура, Kafka и **перспективы развития** (UI, Swagger, auth) — в [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). Сводка сервисов и таблиц БД — [`docs/SERVICES_AND_DATA.md`](docs/SERVICES_AND_DATA.md).
 
 ## Текущий состав
 

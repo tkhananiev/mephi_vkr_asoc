@@ -3,16 +3,18 @@ package httpapi
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 
 	"mephi_vkr_aspm/services/semgrep-service/internal/runner"
 )
 
 type Handler struct {
-	runner *runner.Runner
+	runner                *runner.Runner
+	defaultScanTargetPath string
 }
 
-func New(r *runner.Runner) *Handler {
-	return &Handler{runner: r}
+func New(r *runner.Runner, defaultScanTargetPath string) *Handler {
+	return &Handler{runner: r, defaultScanTargetPath: strings.TrimSpace(defaultScanTargetPath)}
 }
 
 type scanRequest struct {
@@ -40,8 +42,11 @@ func (h *Handler) handleScan(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json body"})
 		return
 	}
+	if strings.TrimSpace(req.TargetPath) == "" {
+		req.TargetPath = h.defaultScanTargetPath
+	}
 	if req.TargetPath == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "target_path required"})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "target_path required (or set APP_DEFAULT_SCAN_TARGET_PATH)"})
 		return
 	}
 

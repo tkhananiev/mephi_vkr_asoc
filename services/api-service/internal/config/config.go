@@ -28,8 +28,9 @@ func Load() Config {
 		KafkaBrokers:         splitCSV(getEnv("APP_KAFKA_BROKERS", "")),
 		KafkaTopicIngest:     getEnv("APP_KAFKA_TOPIC_FINDINGS_INGEST", "aspm.findings.ingest"),
 		KafkaTopicResult:     getEnv("APP_KAFKA_TOPIC_FINDINGS_RESULT", "aspm.findings.ingest.result"),
-		DefaultScanTargetPath: getEnv("APP_DEFAULT_SCAN_TARGET_PATH", ""),
-		DefaultSemgrepConfig:  getEnv("APP_DEFAULT_SEMGREP_CONFIG", ""),
+		// Путь внутри контейнера semgrep-service; по умолчанию учебный каталог из образа (без клонирования WebGoat).
+		DefaultScanTargetPath: getEnv("APP_DEFAULT_SCAN_TARGET_PATH", "/app/demo/vulnerable-app"),
+		DefaultSemgrepConfig: getEnv("APP_DEFAULT_SEMGREP_CONFIG", "/app/demo/semgrep-rules.yml"),
 	}
 }
 

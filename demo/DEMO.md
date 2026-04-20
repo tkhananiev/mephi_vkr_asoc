@@ -1,108 +1,70 @@
 # Demo Guide
 
-Сервис справочников: **`reference-data-service`**, порт **8081** (в `deploy/docker-compose.yml`). Подставь вместо **`localhost`** свой хост, если вызываешь не с той же машины (например `45.87.246.170`).
-
-Во всех примерах ниже: метод **POST**, тела **нет** (в Postman: Body → none).
+`reference-data-service` — порт **8081** (`deploy/docker-compose.yml`). Вместо `localhost` подставь хост стенда, если вызываешь удалённо.
 
 ---
 
-## 1. Синхронизация баз БДУ и CVE (NVD)
-
-**CVE** в системе приходят из **NVD** (REST API 2.0). **БДУ ФСТЭК** — отдельный источник (RSS-фид).
-
-### 1.1. БДУ ФСТЭК
-
-| | |
-|--|--|
-| **Метод** | `POST` |
-| **URL** | `http://localhost:8081/api/v1/sync/bdu` |
-
-**curl:**
+## 1. Синхронизация со справочниками
 
 ```bash
 curl -X POST "http://localhost:8081/api/v1/sync/bdu"
-```
-
-**Postman:** New Request → POST → вставить URL → Send.
-
-**Ответ при успехе:** `202 Accepted`, JSON с полями `source_code`, `run_id`, `items_discovered`, `items_processed`, …
-
-Если фид недоступен, сервис может отработать с **демонстрационной записью** (см. код адаптера БДУ).
-
----
-
-### 1.2. NVD (CVE) — полная выгрузка каталога
-
-Запрос **без** `cve_id` обходит **все страницы** ответа NVD API 2.0 (до **2000** CVE на страницу, пока не исчерпан `totalResults`). Между запросами действует пауза по лимитам NVD (~5 запросов / 30 с без ключа; с ключом — быстрее).
-
-Переменные окружения `reference-data-service` (см. `docs/ENVIRONMENT.md`):
-
-- **`APP_NVD_API_KEY`** — необязательно; [ключ NVD](https://nvd.nist.gov/developers/request-an-api-key) в заголовке `apiKey`, выше лимит и короче полная синхронизация.
-- **`APP_NVD_PAGE_SIZE`** — размер страницы (по умолчанию **2000**, максимум NVD).
-- **`APP_NVD_MAX_PAGES`** — ограничить число страниц за один прогон (**0** = без ограничения). Для теста можно поставить `1`.
-
-Запрос может идти **десятки минут** и держит открытым HTTP-соединение; в Postman увеличь **timeout** (Settings → General).
-
-| | |
-|--|--|
-| **Метод** | `POST` |
-| **URL** | `http://localhost:8081/api/v1/sync/nvd` |
-
-**curl** (долгий запрос):
-
-```bash
 curl --max-time 0 -X POST "http://localhost:8081/api/v1/sync/nvd"
 ```
 
-**Postman:** POST → URL как выше → Send (увеличить таймаут запроса).
+### Схемы и таблицы (reference-data → PostgreSQL)
+
+Миграция: `migrations/001_reference_schema.sql`. Справочники разнесены по схемам:
+
+| Схема | Таблица | Назначение |
+|-------|---------|------------|
+| **catalog** | `reference_records` | Нормализованная запись угрозы/уязвимости: `source_code`, `external_id`, заголовок, описание, даты, `metadata_json`. Уникальность `(source_code, external_id)`. |
+| **catalog** | `reference_aliases` | Алиасы для сопоставления с находками сканера (`alias_type`, `alias_value`), FK на `reference_records.id`. Типы вроде `CVE`, `BDU`, `CWE` (что именно зависит от источника). |
+| **raw** | `reference_raw_items` | Сырой ответ источника (тело, `content_type`, хеш) для аудита и повторной обработки. |
+| **audit** | `reference_sync_runs` | Журнал прогонов синка: `source_code`, статус, счётчики `items_*`, `error_message`. |
+
+Значения **`source_code`** в коде сервиса:
+
+- **`nvd`** — записи из NVD API 2.0; по сути каталог **CVE** (одна строка `reference_records` ≈ один CVE).
+- **`bdu_fstec`** — записи из ленты БДУ ФСТЭК.
+
+### SQL: сколько записей CVE (NVD) и БДУ
+
+Подключение к БД из compose: хост `localhost`, порт `5432`, БД `aspm`, пользователь `aspm` / пароль `aspm` (см. `deploy/docker-compose.yml`).
+
+```sql
+-- CVE-каталог (источник NVD)
+SELECT COUNT(*) AS cve_records_nvd
+FROM catalog.reference_records
+WHERE source_code = 'nvd';
+
+-- Записи БДУ ФСТЭК
+SELECT COUNT(*) AS bdu_records
+FROM catalog.reference_records
+WHERE source_code = 'bdu_fstec';
+
+-- Сводка по всем источникам в справочнике
+SELECT source_code, COUNT(*) AS cnt
+FROM catalog.reference_records
+GROUP BY source_code
+ORDER BY source_code;
+```
+
+Дополнительно — сколько справочных записей имеют алиас `CVE` (в т.ч. БДУ, если в тексте фигурирует CVE):
+
+```sql
+SELECT COUNT(DISTINCT reference_record_id) AS records_with_cve_alias
+FROM catalog.reference_aliases
+WHERE alias_type = 'CVE';
+```
 
 ---
 
-### 1.3. NVD (CVE) — один конкретный идентификатор
+## 2. Запуск Semgrep (находки → обработка)
 
-| | |
-|--|--|
-| **Метод** | `POST` |
-| **URL** | `http://localhost:8081/api/v1/sync/nvd?cve_id=CVE-2021-44228` |
-
-**curl:**
+`api-service` — порт **8080**. Перед первым прогоном с дефолтной целью: `./demo/scan-targets/clone-webgoat.sh`.
 
 ```bash
-curl -X POST "http://localhost:8081/api/v1/sync/nvd?cve_id=CVE-2021-44228"
+curl -X POST "http://localhost:8080/api/v1/scans/semgrep" \
+  -H "Content-Type: application/json" \
+  -d '{"scanner_name":"semgrep"}'
 ```
-
-**Postman:** тот же URL в строке запроса; вкладка **Params**: ключ `cve_id`, значение `CVE-2021-44228` (или другой CVE).
-
----
-
-### 1.4. БДУ и NVD подряд (одним запросом)
-
-| | |
-|--|--|
-| **Метод** | `POST` |
-| **URL** | `http://localhost:8081/api/v1/sync/all` |
-
-**curl:**
-
-```bash
-curl -X POST "http://localhost:8081/api/v1/sync/all"
-```
-
-Полная синхронизация NVD может занять много времени; при необходимости вызывай **§1.1** и **§1.2** по отдельности вместо `sync/all`.
-
----
-
-### 1.5. История прогонов синхронизации
-
-| | |
-|--|--|
-| **Метод** | `GET` |
-| **URL** | `http://localhost:8081/api/v1/sync/runs?limit=10` |
-
-**curl:**
-
-```bash
-curl "http://localhost:8081/api/v1/sync/runs?limit=10"
-```
-
-**Postman:** GET → тот же URL.
