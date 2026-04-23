@@ -1,0 +1,142 @@
+openapi: 3.0.3
+info:
+  title: ASPM Public API (api-service)
+  description: |
+    Единственная публичная HTTP-точка входа для клиентов: один вызов запускает цепочку
+    Semgrep → обработка находок → группы → тикеты и возвращает сводный «паспорт».
+    Остальные сервисы (reference-data, processing, jira-integration, semgrep) вызываются
+    из контура и не описываются отдельным OpenAPI.
+  version: "1.0"
+servers:
+  - url: http://localhost:8080
+    description: Локально (docker-compose)
+paths:
+  /health:
+    get:
+      summary: Проверка живости
+      operationId: health
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthOk"
+  /api/v1/scans/semgrep:
+    post:
+      summary: Полный сценарий сканирования (Semgrep + ingest + группы + тикеты)
+      operationId: scanSemgrep
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ScanRequest"
+      responses:
+        "202":
+          description: Паспорт сценария
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PassportResponse"
+        "400":
+          description: Неверное тело
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        "502":
+          description: Ошибка downstream
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+components:
+  schemas:
+    HealthOk:
+      type: object
+      properties:
+        status:
+          type: string
+          example: ok
+    ErrorBody:
+      type: object
+      properties:
+        error:
+          type: string
+    ScanRequest:
+      type: object
+      properties:
+        scanner_name:
+          type: string
+          example: semgrep
+        target_path:
+          type: string
+          description: Путь внутри контейнера semgrep-service
+        semgrep_config:
+          type: string
+          description: Путь к YAML правилам или набор Semgrep (p/java)
+    ProcessingSummary:
+      type: object
+      properties:
+        run_id:
+          type: integer
+          format: int64
+        findings_received:
+          type: integer
+        findings_processed:
+          type: integer
+        vulnerabilities_created:
+          type: integer
+        groups_updated:
+          type: integer
+    GroupItem:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        group_key:
+          type: string
+        grouping_rule:
+          type: string
+        severity_max:
+          type: string
+        assets_count:
+          type: integer
+        status:
+          type: string
+    TicketItem:
+      type: object
+      properties:
+        group_id:
+          type: integer
+          format: int64
+        jira_issue_key:
+          type: string
+        jira_issue_url:
+          type: string
+        sync_status:
+          type: string
+        idempotency_key:
+          type: string
+    PassportResponse:
+      type: object
+      properties:
+        scanner_name:
+          type: string
+        scan_target:
+          type: string
+        findings:
+          type: array
+          items: {}
+        processing:
+          $ref: "#/components/schemas/ProcessingSummary"
+        groups:
+          type: array
+          items:
+            $ref: "#/components/schemas/GroupItem"
+        tickets:
+          type: array
+          items:
+            $ref: "#/components/schemas/TicketItem"

@@ -11,6 +11,7 @@ import (
 	"mephi_vkr_aspm/services/api-service/internal/httpapi"
 	pkgkafka "mephi_vkr_aspm/services/api-service/internal/kafka"
 	"mephi_vkr_aspm/services/api-service/internal/service"
+	"mephi_vkr_aspm/services/api-service/internal/swaggerui"
 )
 
 type App struct {
@@ -42,6 +43,7 @@ func New(cfg config.Config) (*App, error) {
 	mux := http.NewServeMux()
 	handler := httpapi.New(orchestrator, cfg.DefaultScanTargetPath, cfg.DefaultSemgrepConfig)
 	handler.Register(mux)
+	swaggerui.Register(mux)
 
 	return &App{
 		server: &http.Server{
