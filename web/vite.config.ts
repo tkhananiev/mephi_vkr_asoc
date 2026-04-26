@@ -6,6 +6,8 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 5173,
+    // С другой машины в сети / по IP хоста открывай URL из строки «Network» в консоли Vite, не localhost.
+    host: true,
     proxy: {
       '^/api/v1/scans': {
         target: 'http://127.0.0.1:8080',
