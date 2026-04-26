@@ -1,0 +1,22 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: aspm
+
+resources:
+  - namespace.yaml
+  - postgres.yaml
+  - kafka.yaml
+  - workloads.yaml
+  - frontend.yaml
+
+configMapGenerator:
+  - name: aspm-migrations
+    options:
+      disableNameSuffixHash: true
+    files:
+      - ../../migrations/001_reference_schema.sql
+      - ../../migrations/002_processing_schema.sql
+      - ../../migrations/003_integration_schema.sql
+      - ../../migrations/004_demo_seed.sql
+      - ../../migrations/005_demo_cwe_alias.sql

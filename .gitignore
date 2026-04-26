@@ -40,3 +40,6 @@ demo/VIDEO_SCRIPT.md
 # Frontend (Vite)
 web/node_modules/
 web/dist/
+
+# K8s секреты (копия с secret.example.yaml)
+deploy/k8s/secret.yaml

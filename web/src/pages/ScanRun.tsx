@@ -1,10 +1,9 @@
-import { useState } from 'react'
+import { useState, type FormEvent } from 'react'
 import { runSemgrepScenario } from '../api/client'
 import type { PassportResponse } from '../api/types'
 import { PageFrame } from '../layout/PageFrame'
 
 const defaultBody = {
-  scanner_name: 'semgrep',
   target_path: '/app/demo/vulnerable-app',
   semgrep_config: '/app/demo/semgrep-rules.yml',
 }
@@ -16,7 +15,7 @@ export function ScanRun() {
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<PassportResponse | null>(null)
 
-  async function onSubmit(e: React.FormEvent) {
+  async function onSubmit(e: FormEvent) {
     e.preventDefault()
     setLoading(true)
     setError(null)
@@ -36,43 +35,62 @@ export function ScanRun() {
 
   return (
     <PageFrame
-      title="Сканирование"
-      lead="Запуск полного сценария: Semgrep → обработка → группы → тикеты (как POST /api/v1/scans/semgrep на api-service)."
-      badge="POST :8080"
+      eyebrow="Сценарий"
+      title="Скан и паспорт"
+      lead="Полный проход: Semgrep → processing → группы → тикеты. Пути target и правила — внутри контейнера semgrep."
+      badge="api-service :8080"
     >
       <div className="split">
-        <div>
+        <div className="panel-elevated">
+          <h2 className="card-title" style={{ marginTop: 0 }}>
+            <span className="card-title-dot" aria-hidden />
+            Параметры
+          </h2>
           <form className="form-grid" onSubmit={onSubmit}>
             <label className="field">
-              target_path (внутри контейнера semgrep)
+              <span>target_path</span>
+              <span className="hint">каталог с кодом внутри контейнера semgrep</span>
               <input
                 value={targetPath}
                 onChange={(e) => setTargetPath(e.target.value)}
                 autoComplete="off"
+                spellCheck={false}
               />
             </label>
             <label className="field">
-              semgrep_config
+              <span>semgrep_config</span>
+              <span className="hint">путь к YAML или набор, например p/java</span>
               <input
                 value={semgrepConfig}
                 onChange={(e) => setSemgrepConfig(e.target.value)}
                 autoComplete="off"
+                spellCheck={false}
               />
             </label>
             <button className="btn btn-primary" type="submit" disabled={loading}>
-              {loading ? 'Выполняется…' : 'Запустить сценарий'}
+              {loading ? 'Пайплайн выполняется…' : 'Запустить сценарий'}
             </button>
             {error ? <p className="err">{error}</p> : null}
           </form>
         </div>
-        <div className="card" style={{ margin: 0 }}>
-          <h2 className="card-title">Ответ (паспорт)</h2>
-          <textarea
-            className="code-preview"
-            readOnly
-            value={result ? JSON.stringify(result, null, 2) : '—'}
-            spellCheck={false}
-          />
+        <div>
+          <div className="code-window">
+            <div className="code-window-hd">
+              <span className="code-window-dots" aria-hidden>
+                <i />
+                <i />
+                <i />
+              </span>
+              <span>response.json</span>
+            </div>
+            <textarea
+              className="code-preview"
+              readOnly
+              placeholder="// ответ API появится здесь"
+              value={result ? JSON.stringify(result, null, 2) : ''}
+              spellCheck={false}
+            />
+          </div>
         </div>
       </div>
     </PageFrame>

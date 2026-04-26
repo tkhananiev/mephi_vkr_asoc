@@ -4,22 +4,28 @@ export function PageFrame({
   title,
   lead,
   badge,
+  eyebrow,
   children,
 }: {
   title: string
   lead?: string
   badge?: string
+  /** Короткий ярлык над заголовком */
+  eyebrow?: string
   children: ReactNode
 }) {
   return (
     <>
       <header className="topbar">
-        <span className="topbar-title">ASPM Console</span>
+        <div className="topbar-left">ASPM</div>
         {badge ? <span className="topbar-pill">{badge}</span> : null}
       </header>
       <main className="page">
-        <h1>{title}</h1>
-        {lead ? <p className="page-lead">{lead}</p> : null}
+        <div className="page-hero">
+          {eyebrow ? <div className="page-eyebrow">{eyebrow}</div> : null}
+          <h1 className="page-title">{title}</h1>
+          {lead ? <p className="page-lead">{lead}</p> : null}
+        </div>
         {children}
       </main>
     </>

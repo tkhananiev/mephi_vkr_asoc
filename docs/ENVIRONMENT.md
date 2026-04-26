@@ -31,6 +31,7 @@
 | `APP_KAFKA_TOPIC_FINDINGS_RESULT` | — | `aspm.findings.ingest.result` |
 | `APP_DEFAULT_SCAN_TARGET_PATH` | `/app/demo/scan-targets/WebGoat` | _(пусто)_ |
 | `APP_DEFAULT_SEMGREP_CONFIG` | `p/java` | _(пусто)_ |
+| `APP_AUTH_API_KEY` | в `deploy/k8s` из Secret | _(пусто)_ — если задано, для `POST/PUT/DELETE /api/*` нужен заголовок `Authorization: Bearer <ключ>` или `X-API-Key`; `/health` и Swagger без ключа |
 
 `APP_DEFAULT_*` подставляются, если в `POST /api/v1/scans/semgrep` не указаны `target_path` / `semgrep_config`. Путь — **в контейнере `semgrep-service`**, каталог `WebGoat` нужно один раз клонировать: `demo/scan-targets/clone-webgoat.sh`.
 

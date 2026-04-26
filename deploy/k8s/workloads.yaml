@@ -1,0 +1,318 @@
+# Образы собираются из корня репозитория: см. README в этой папке.
+# imagePullPolicy: IfNotPresent — для minikube после local docker build.
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: reference-data-service
+  namespace: aspm
+spec:
+  ports:
+    - port: 8081
+      targetPort: 8081
+  selector:
+    app: reference-data-service
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: reference-data-service
+  namespace: aspm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: reference-data-service
+  template:
+    metadata:
+      labels:
+        app: reference-data-service
+    spec:
+      containers:
+        - name: app
+          image: aspm/reference-data-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8081
+          env:
+            - name: APP_HTTP_PORT
+              value: "8081"
+            - name: APP_POSTGRES_DSN
+              valueFrom:
+                secretKeyRef:
+                  name: aspm-secrets
+                  key: postgres-dsn
+            - name: APP_KAFKA_BROKERS
+              value: kafka:9092
+            - name: APP_BDU_FEED_URL
+              value: https://bdu.fstec.ru/ubi/vul/rss
+            - name: APP_BDU_INSECURE_SKIP_VERIFY
+              value: "true"
+            - name: APP_NVD_API_BASE_URL
+              value: https://services.nvd.nist.gov/rest/json/cves/2.0
+            - name: APP_SYNC_SCHEDULER_ENABLED
+              value: "true"
+            - name: APP_SYNC_INITIAL_DELAY
+              value: 1m
+            - name: APP_SYNC_INTERVAL
+              value: 24h
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8081
+            initialDelaySeconds: 5
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: processing-service
+  namespace: aspm
+spec:
+  ports:
+    - port: 8082
+      targetPort: 8082
+  selector:
+    app: processing-service
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: processing-service
+  namespace: aspm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: processing-service
+  template:
+    metadata:
+      labels:
+        app: processing-service
+    spec:
+      containers:
+        - name: app
+          image: aspm/processing-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8082
+          env:
+            - name: APP_HTTP_PORT
+              value: "8082"
+            - name: APP_POSTGRES_DSN
+              valueFrom:
+                secretKeyRef:
+                  name: aspm-secrets
+                  key: postgres-dsn
+            - name: APP_KAFKA_BROKERS
+              value: kafka:9092
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8082
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: semgrep-service
+  namespace: aspm
+spec:
+  ports:
+    - port: 8085
+      targetPort: 8085
+  selector:
+    app: semgrep-service
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: semgrep-service
+  namespace: aspm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: semgrep-service
+  template:
+    metadata:
+      labels:
+        app: semgrep-service
+    spec:
+      containers:
+        - name: app
+          image: aspm/semgrep-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8085
+          env:
+            - name: APP_HTTP_PORT
+              value: "8085"
+            - name: APP_SEMGREP_CONFIG
+              value: /app/demo/semgrep-rules.yml
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8085
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: jira-mock
+  namespace: aspm
+spec:
+  ports:
+    - port: 8090
+      targetPort: 8090
+  selector:
+    app: jira-mock
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jira-mock
+  namespace: aspm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: jira-mock
+  template:
+    metadata:
+      labels:
+        app: jira-mock
+    spec:
+      containers:
+        - name: app
+          image: aspm/jira-mock:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8090
+          env:
+            - name: APP_HTTP_PORT
+              value: "8090"
+            - name: APP_JIRA_PUBLIC_BASE_URL
+              value: http://jira-mock:8090
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8090
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: jira-integration-service
+  namespace: aspm
+spec:
+  ports:
+    - port: 8083
+      targetPort: 8083
+  selector:
+    app: jira-integration-service
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jira-integration-service
+  namespace: aspm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: jira-integration-service
+  template:
+    metadata:
+      labels:
+        app: jira-integration-service
+    spec:
+      containers:
+        - name: app
+          image: aspm/jira-integration-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8083
+          env:
+            - name: APP_HTTP_PORT
+              value: "8083"
+            - name: APP_POSTGRES_DSN
+              valueFrom:
+                secretKeyRef:
+                  name: aspm-secrets
+                  key: postgres-dsn
+            - name: APP_JIRA_BASE_URL
+              value: http://jira-mock:8090
+            - name: APP_JIRA_PROJECT_KEY
+              value: ASPM
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8083
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: api-service
+  namespace: aspm
+spec:
+  ports:
+    - port: 8080
+      targetPort: 8080
+  selector:
+    app: api-service
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-service
+  namespace: aspm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: api-service
+  template:
+    metadata:
+      labels:
+        app: api-service
+    spec:
+      initContainers:
+        - name: wait-kafka
+          image: busybox:1.36
+          command: ["sh", "-c", "until nc -z kafka 9092; do echo waiting kafka; sleep 2; done"]
+      containers:
+        - name: app
+          image: aspm/api-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+          env:
+            - name: APP_HTTP_PORT
+              value: "8080"
+            - name: APP_PROCESSING_SERVICE_URL
+              value: http://processing-service:8082
+            - name: APP_JIRA_SERVICE_URL
+              value: http://jira-integration-service:8083
+            - name: APP_SEMGREP_SERVICE_URL
+              value: http://semgrep-service:8085
+            - name: APP_KAFKA_BROKERS
+              value: kafka:9092
+            - name: APP_DEFAULT_SCAN_TARGET_PATH
+              value: /app/demo/vulnerable-app
+            - name: APP_DEFAULT_SEMGREP_CONFIG
+              value: /app/demo/semgrep-rules.yml
+            - name: APP_AUTH_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: aspm-secrets
+                  key: api-auth-key
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 20

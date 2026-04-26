@@ -19,8 +19,8 @@ export function ReferenceSync() {
     setRuns(r.data)
   }, [])
 
-  async function run(path: '/api/v1/sync/bdu' | '/api/v1/sync/nvd' | '/api/v1/sync/all', query = '') {
-    setBusy(path + query)
+  async function run(path: '/api/v1/sync/bdu' | '/api/v1/sync/nvd' | '/api/v1/sync/all', query = '', label: string) {
+    setBusy(label)
     setMsg(null)
     const r = await postSync(path, query)
     setBusy(null)
@@ -28,55 +28,66 @@ export function ReferenceSync() {
       setMsg(r.error)
       return
     }
-    setMsg(`Запрос принят (HTTP ${r.status}). Обновите таблицу прогонов.`)
+    setMsg(`Принято (HTTP ${r.status}). Актуализируйте список прогонов.`)
     await loadRuns()
   }
 
   return (
     <PageFrame
-      title="Справочник CVE / БДУ"
-      lead="Управление синхронизацией reference-data-service. Полный NVD может занимать много времени; для проверки используйте один CVE."
-      badge=":8081"
+      eyebrow="Справочник"
+      title="БДУ · NVD"
+      lead="Ручной синк с ФСТЭК и NIST. Полный NVD может идти долго — для демо достаточно одного CVE."
+      badge="reference-data :8081"
     >
-      <div className="btn-row" style={{ marginBottom: '1rem' }}>
+      {msg ? <div className="msg-banner">{msg}</div> : null}
+      {busy ? (
+        <div className="msg-banner" style={{ borderColor: 'rgba(99, 102, 241, 0.4)' }}>
+          Выполняется: {busy}…
+        </div>
+      ) : null}
+
+      <div className="action-grid">
         <button
           type="button"
-          className="btn btn-ghost"
+          className="action-card accent-bdu"
           disabled={!!busy}
-          onClick={() => run('/api/v1/sync/bdu')}
+          onClick={() => run('/api/v1/sync/bdu', '', 'БДУ (RSS)')}
         >
-          Синк БДУ
+          <h4>БДУ ФСТЭК</h4>
+          <p>RSS-лента, запись в catalog / raw / audit</p>
         </button>
         <button
           type="button"
-          className="btn btn-ghost"
+          className="action-card accent-nvd"
           disabled={!!busy}
-          onClick={() => run('/api/v1/sync/nvd', '?cve_id=CVE-2021-44228')}
+          onClick={() => run('/api/v1/sync/nvd', '?cve_id=CVE-2021-44228', 'NVD одна CVE')}
         >
-          NVD: CVE-2021-44228
+          <h4>NVD · одна CVE</h4>
+          <p>Быстрый тест, например Log4Shell</p>
         </button>
         <button
           type="button"
-          className="btn btn-ghost"
+          className="action-card accent-nvd"
           disabled={!!busy}
-          onClick={() => run('/api/v1/sync/nvd')}
+          onClick={() => run('/api/v1/sync/nvd', '', 'NVD полный')}
         >
-          NVD полный
+          <h4>NVD · полный прогон</h4>
+          <p>Долго, нужен API key и сеть</p>
         </button>
         <button
           type="button"
-          className="btn btn-ghost"
+          className="action-card accent-warn"
           disabled={!!busy}
-          onClick={() => run('/api/v1/sync/all')}
+          onClick={() => run('/api/v1/sync/all', '', 'БДУ + NVD')}
         >
-          БДУ + NVD
+          <h4>БДУ + NVD</h4>
+          <p>Оба источника подряд</p>
         </button>
-        <button type="button" className="btn btn-primary" onClick={() => loadRuns()}>
-          Обновить прогоны
+        <button type="button" className="action-card" onClick={() => loadRuns()}>
+          <h4>Обновить прогоны</h4>
+          <p>GET /api/v1/sync/runs</p>
         </button>
       </div>
-      {busy ? <p className="page-lead">Выполняется: {busy}…</p> : null}
-      {msg ? <p className="page-lead">{msg}</p> : null}
 
       <div className="table-wrap">
         <table className="data">
@@ -93,21 +104,23 @@ export function ReferenceSync() {
           <tbody>
             {runs === null ? (
               <tr>
-                <td colSpan={6} style={{ color: 'var(--text-muted)' }}>
-                  Нажмите «Обновить прогоны»
+                <td colSpan={6} className="table-empty">
+                  Нажмите «Обновить прогоны», чтобы подтянуть audit.reference_sync_runs
                 </td>
               </tr>
             ) : runs.length === 0 ? (
               <tr>
-                <td colSpan={6} style={{ color: 'var(--text-muted)' }}>
-                  Пока нет записей
+                <td colSpan={6} className="table-empty">
+                  Записей ещё нет
                 </td>
               </tr>
             ) : (
               runs.map((row) => (
                 <tr key={row.id}>
                   <td>{row.id}</td>
-                  <td>{row.source_code}</td>
+                  <td>
+                    <code style={{ color: 'var(--accent-2)' }}>{row.source_code}</code>
+                  </td>
                   <td>
                     <span className="badge">{row.status}</span>
                   </td>

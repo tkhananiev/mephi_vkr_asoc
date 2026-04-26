@@ -17,6 +17,8 @@ type Config struct {
 	DefaultScanTargetPath string
 	// DefaultSemgrepConfig — например p/java; передаётся в semgrep-service, если в запросе нет semgrep_config.
 	DefaultSemgrepConfig string
+	// AuthAPIKey — если не пусто, для путей /api/* требуется Authorization: Bearer <ключ> или X-API-Key. /health и Swagger без ключа.
+	AuthAPIKey string
 }
 
 func Load() Config {
@@ -31,6 +33,7 @@ func Load() Config {
 		// Путь внутри контейнера semgrep-service; по умолчанию учебный каталог из образа (без клонирования WebGoat).
 		DefaultScanTargetPath: getEnv("APP_DEFAULT_SCAN_TARGET_PATH", "/app/demo/vulnerable-app"),
 		DefaultSemgrepConfig: getEnv("APP_DEFAULT_SEMGREP_CONFIG", "/app/demo/semgrep-rules.yml"),
+		AuthAPIKey:            os.Getenv("APP_AUTH_API_KEY"),
 	}
 }
 

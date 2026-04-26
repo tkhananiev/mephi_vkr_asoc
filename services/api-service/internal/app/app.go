@@ -44,11 +44,12 @@ func New(cfg config.Config) (*App, error) {
 	handler := httpapi.New(orchestrator, cfg.DefaultScanTargetPath, cfg.DefaultSemgrepConfig)
 	handler.Register(mux)
 	swaggerui.Register(mux)
+	root := httpapi.WithAPIKeyAuth(cfg.AuthAPIKey, mux)
 
 	return &App{
 		server: &http.Server{
 			Addr:    ":" + cfg.HTTPPort,
-			Handler: mux,
+			Handler: root,
 		},
 	}, nil
 }
