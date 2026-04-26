@@ -1,6 +1,6 @@
 # mephi_vkr_asoc
 
-MVP для управления уязвимостями: микросервисы на Go, общая PostgreSQL, Kafka для асинхронного ingest находок, сценарий сканирования Semgrep и постановки тикетов в Jira (на стенде — мок). Запуск backend: `deploy/docker-compose.yml`. Браузерный клиент — **`web/`** (React + Vite), вызывает те же REST API, что и сценарии в `demo/DEMO.md`. Дополнительно сценарий можно проходить через `curl`/Postman и при необходимости смотреть таблицы в PostgreSQL.
+MVP для управления уязвимостями: микросервисы на Go, общая PostgreSQL, Kafka для асинхронного ingest находок, сценарий сканирования Semgrep и постановки тикетов в Jira (на стенде — мок). Запуск backend: `deploy/docker-compose.yml`. Браузерный клиент — отдельный репозиторий **`mephi_vkr_asoc_front`** (React + Vite), те же REST API, что в `demo/DEMO.md`. Дополнительно сценарий можно проходить через `curl`/Postman и при необходимости смотреть таблицы в PostgreSQL.
 
 Повествование по архитектуре, потокам и Kafka: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). Сводные таблицы сервисов и схем данных: [`docs/SERVICES_AND_DATA.md`](docs/SERVICES_AND_DATA.md).
 
@@ -13,7 +13,7 @@ MVP для управления уязвимостями: микросервис
 - `services/jira-mock` — тестовый Jira-контур для локального smoke-теста
 - `services/semgrep-service` — HTTP-обёртка над Semgrep (SAST), отдельный контейнер
 - `migrations` — инициализация схем `catalog`, `audit`, `raw`
-- `web/` — веб-интерфейс (дашборд, скан, группы, синхронизация справочников)
+- веб-интерфейс — в репозитории **`mephi_vkr_asoc_front`** (рядом с этим каталогом)
 - `deploy/docker-compose.yml` — локальный контур backend MVP
 
 ## Что уже реализовано

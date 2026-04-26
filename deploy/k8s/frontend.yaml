@@ -1,4 +1,4 @@
-# Статика + reverse proxy (см. web/nginx/default.conf). Образ: docker build -f web/Dockerfile -t asoc/web:latest .
+# Статика + reverse proxy (см. mephi_vkr_asoc_front/nginx/default.conf). Образ: в mephi_vkr_asoc_front — docker build -t asoc/web:latest .
 ---
 apiVersion: v1
 kind: Service

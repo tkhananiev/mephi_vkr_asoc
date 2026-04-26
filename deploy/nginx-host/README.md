@@ -1,24 +1,26 @@
 # Nginx на хосте VPS (тесты до миграции в Kubernetes)
 
-Фронт отдаётся **статикой** с диска; маршруты API проксируются на **docker-compose** на `127.0.0.1` (тот же план портов, что в `web/vite.config.ts`).
+Фронт отдаётся **статикой** с диска; маршруты API проксируются на **docker-compose** на `127.0.0.1` (тот же план портов, что в `mephi_vkr_asoc_front/vite.config.ts`).
 
 ## Сборка фронта
 
+Репозиторий **`mephi_vkr_asoc_front`** (рядом с `mephi_vkr_asoc`):
+
 ```bash
-cd mephi_vkr_asoc/web
+cd mephi_vkr_asoc_front
 npm ci
 npm run build
 ```
 
 ## Размещение файлов
 
-Скопируй каталог `dist` на сервер, например:
+Скопируй каталог **`dist`** на сервер, например:
 
 ```text
-/var/www/asoc/web/dist
+/var/www/asoc/dist
 ```
 
-В `asoc-site.conf` выставь `root` на этот путь (в примере по умолчанию `/var/www/asoc/web/dist`).
+В `asoc-site.conf` выставь `root` на этот путь (в примере по умолчанию `/var/www/asoc/dist`).
 
 ## Подключение к nginx
 
@@ -40,12 +42,12 @@ sudo nginx -t && sudo systemctl reload nginx
 
 Убедись, что контейнеры с этими портами подняты на той же машине.
 
-## Следующий шаг: Kubernetes
+## Образ для Kubernetes
 
-Образ с тем же `nginx` внутри контейнера и `web/nginx/default.conf` (апстримы по DNS сервисов в namespace) собирается из корня репо:
+Из каталога **`mephi_vkr_asoc_front`**:
 
 ```bash
-docker build -f web/Dockerfile -t asoc/web:latest .
+docker build -t asoc/web:latest .
 ```
 
 Манифест `deploy/k8s/frontend.yaml` — см. `deploy/k8s/README.md`.

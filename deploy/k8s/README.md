@@ -13,7 +13,13 @@ docker build -f services/processing-service/Dockerfile -t asoc/processing-servic
 docker build -f services/semgrep-service/Dockerfile -t asoc/semgrep-service:latest .
 docker build -f services/jira-integration-service/Dockerfile -t asoc/jira-integration-service:latest .
 docker build -f services/jira-mock/Dockerfile -t asoc/jira-mock:latest .
-docker build -f web/Dockerfile -t asoc/web:latest .
+```
+
+Образ фронта собирается **из репозитория `mephi_vkr_asoc_front`** (рядом с этим каталогом):
+
+```bash
+cd ../mephi_vkr_asoc_front
+docker build -t asoc/web:latest .
 ```
 
 **minikube:** `eval $(minikube docker-env)` перед `docker build`, и в манифестах оставьте `imagePullPolicy: IfNotPresent`.
@@ -38,7 +44,7 @@ kubectl apply --load-restrictor=LoadRestrictionsNone -k deploy/k8s
 
 ## 4. Фронт (asoc-web)
 
-После `kubectl apply` в кластере появляется `Deployment`/`Service` **asoc-web** (один `nginx` с собранной статикой и прокси на бэкенды по внутренним DNS-именам, см. `web/nginx/default.conf`).
+После `kubectl apply` в кластере появляется `Deployment`/`Service` **asoc-web** (один `nginx` с собранной статикой и прокси на бэкенды по внутренним DNS-именам, см. `mephi_vkr_asoc_front/nginx/default.conf`).
 
 Проброс в браузер:
 
