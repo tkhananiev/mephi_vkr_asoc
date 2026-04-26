@@ -1,5 +1,5 @@
 #!/usr/bin/env sh
-# Клонирует OWASP WebGoat в этот каталог (на хосте). В compose путь в контейнере semgrep: /app/demo/scan-targets/WebGoat
+# Клонирует OWASP WebGoat в этот каталог (на хосте). В compose путь в контейнере semgrep: /app/demo/scan-targets/WebGoat/
 set -e
 cd "$(dirname "$0")"
 if [ -d WebGoat ]; then

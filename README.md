@@ -80,7 +80,7 @@ docker compose -f deploy/docker-compose.yml up -d --build
 
 Semgrep в контейнере **`semgrep-service`** читает **файлы** по `target_path` (путь **внутри этого контейнера**). Каталог `demo/` смонтирован как `/app/demo/...`.
 
-По умолчанию в compose для **`api-service`** заданы **`APP_DEFAULT_SCAN_TARGET_PATH=/app/demo/scan-targets/WebGoat`** и **`APP_DEFAULT_SEMGREP_CONFIG=p/java`**: перед первым прогоном выполните **`demo/scan-targets/clone-webgoat.sh`**. Альтернативы (DVWA, учебный `vulnerable-app`) — в `demo/scan-targets/README.md`.
+По умолчанию в compose для **`api-service`** и **`semgrep-service`** заданы **`APP_DEFAULT_SCAN_TARGET_PATH=/app/demo/scan-targets/WebGoat/`** и набор правил **`p/java`** (`APP_DEFAULT_SEMGREP_CONFIG` / `APP_SEMGREP_CONFIG`): перед первым прогоном выполните **`demo/scan-targets/clone-webgoat.sh`**. Альтернативы (DVWA, учебный `vulnerable-app`, локальный YAML) — в `demo/scan-targets/README.md`.
 
 ## Demo-артефакты
 

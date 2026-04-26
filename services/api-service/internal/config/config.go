@@ -30,9 +30,9 @@ func Load() Config {
 		KafkaBrokers:         splitCSV(getEnv("APP_KAFKA_BROKERS", "")),
 		KafkaTopicIngest:     getEnv("APP_KAFKA_TOPIC_FINDINGS_INGEST", "asoc.findings.ingest"),
 		KafkaTopicResult:     getEnv("APP_KAFKA_TOPIC_FINDINGS_RESULT", "asoc.findings.ingest.result"),
-		// Путь внутри контейнера semgrep-service; по умолчанию учебный каталог из образа (без клонирования WebGoat).
-		DefaultScanTargetPath: getEnv("APP_DEFAULT_SCAN_TARGET_PATH", "/app/demo/vulnerable-app"),
-		DefaultSemgrepConfig: getEnv("APP_DEFAULT_SEMGREP_CONFIG", "/app/demo/semgrep-rules.yml"),
+		// Путь внутри контейнера semgrep-service; по умолчанию WebGoat из demo/scan-targets (см. clone-webgoat.sh).
+		DefaultScanTargetPath: getEnv("APP_DEFAULT_SCAN_TARGET_PATH", "/app/demo/scan-targets/WebGoat/"),
+		DefaultSemgrepConfig: getEnv("APP_DEFAULT_SEMGREP_CONFIG", "p/java"),
 		AuthAPIKey:            os.Getenv("APP_AUTH_API_KEY"),
 	}
 }

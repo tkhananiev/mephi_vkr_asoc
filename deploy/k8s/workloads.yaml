@@ -148,7 +148,9 @@ spec:
             - name: APP_HTTP_PORT
               value: "8085"
             - name: APP_SEMGREP_CONFIG
-              value: /app/demo/semgrep-rules.yml
+              value: p/java
+            - name: APP_DEFAULT_SCAN_TARGET_PATH
+              value: /app/demo/scan-targets/WebGoat/
           readinessProbe:
             httpGet:
               path: /health
@@ -296,9 +298,9 @@ spec:
             - name: APP_KAFKA_BROKERS
               value: kafka:9092
             - name: APP_DEFAULT_SCAN_TARGET_PATH
-              value: /app/demo/vulnerable-app
+              value: /app/demo/scan-targets/WebGoat/
             - name: APP_DEFAULT_SEMGREP_CONFIG
-              value: /app/demo/semgrep-rules.yml
+              value: p/java
             - name: APP_AUTH_API_KEY
               valueFrom:
                 secretKeyRef:

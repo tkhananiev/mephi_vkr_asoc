@@ -72,9 +72,11 @@ components:
           example: semgrep
         target_path:
           type: string
+          example: /app/demo/scan-targets/WebGoat/
           description: Путь внутри контейнера semgrep-service
         semgrep_config:
           type: string
+          example: p/java
           description: Путь к YAML правилам или набор Semgrep (p/java)
     ProcessingSummary:
       type: object

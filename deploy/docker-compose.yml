@@ -77,7 +77,8 @@ services:
     container_name: mephi-vkr-semgrep-service
     environment:
       APP_HTTP_PORT: "8085"
-      APP_SEMGREP_CONFIG: /app/demo/semgrep-rules.yml
+      APP_SEMGREP_CONFIG: p/java
+      APP_DEFAULT_SCAN_TARGET_PATH: /app/demo/scan-targets/WebGoat/
     volumes:
       - ../demo:/app/demo:ro
     ports:
@@ -94,7 +95,7 @@ services:
       APP_JIRA_SERVICE_URL: http://jira-integration-service:8083
       APP_SEMGREP_SERVICE_URL: http://semgrep-service:8085
       APP_KAFKA_BROKERS: kafka:9092
-      APP_DEFAULT_SCAN_TARGET_PATH: /app/demo/scan-targets/WebGoat
+      APP_DEFAULT_SCAN_TARGET_PATH: /app/demo/scan-targets/WebGoat/
       APP_DEFAULT_SEMGREP_CONFIG: p/java
     depends_on:
       - kafka

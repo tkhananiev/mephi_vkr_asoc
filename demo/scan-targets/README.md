@@ -14,7 +14,7 @@ Semgrep читает **файлы** по пути `target_path` **внутри �
 
    Либо: `cd demo/scan-targets && git clone --depth 1 https://github.com/WebGoat/WebGoat.git`
 
-2. В `deploy/docker-compose.yml` у `api-service` заданы **`APP_DEFAULT_SCAN_TARGET_PATH=/app/demo/scan-targets/WebGoat`** и **`APP_DEFAULT_SEMGREP_CONFIG=p/java`**. Достаточно вызвать `POST /api/v1/scans/semgrep` с телом, например `{"scanner_name":"semgrep"}` (без `target_path` — подставится из env).
+2. В `deploy/docker-compose.yml` у **`api-service`** и **`semgrep-service`** заданы **`APP_DEFAULT_SCAN_TARGET_PATH=/app/demo/scan-targets/WebGoat/`** и набор **`p/java`**. Достаточно вызвать `POST /api/v1/scans/semgrep` с телом, например `{"scanner_name":"semgrep"}` (без `target_path` — подставится из env).
 
 3. Первый запуск `p/java` может тянуть правила из реестра Semgrep — нужен исходящий интернет в контейнере `semgrep-service`.
 

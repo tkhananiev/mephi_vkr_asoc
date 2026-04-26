@@ -29,8 +29,8 @@
 | `APP_KAFKA_BROKERS` | `kafka:9092` | _(пусто)_ |
 | `APP_KAFKA_TOPIC_FINDINGS_INGEST` | — | `asoc.findings.ingest` |
 | `APP_KAFKA_TOPIC_FINDINGS_RESULT` | — | `asoc.findings.ingest.result` |
-| `APP_DEFAULT_SCAN_TARGET_PATH` | `/app/demo/scan-targets/WebGoat` | _(пусто)_ |
-| `APP_DEFAULT_SEMGREP_CONFIG` | `p/java` | _(пусто)_ |
+| `APP_DEFAULT_SCAN_TARGET_PATH` | `/app/demo/scan-targets/WebGoat/` | `/app/demo/scan-targets/WebGoat/` |
+| `APP_DEFAULT_SEMGREP_CONFIG` | `p/java` | `p/java` |
 | `APP_AUTH_API_KEY` | в `deploy/k8s` из Secret | _(пусто)_ — если задано, для `POST/PUT/DELETE /api/*` нужен заголовок `Authorization: Bearer <ключ>` или `X-API-Key`; `/health` и Swagger без ключа |
 
 `APP_DEFAULT_*` подставляются, если в `POST /api/v1/scans/semgrep` не указаны `target_path` / `semgrep_config`. Путь — **в контейнере `semgrep-service`**, каталог `WebGoat` нужно один раз клонировать: `demo/scan-targets/clone-webgoat.sh`.
@@ -81,7 +81,8 @@
 | Переменная | В compose | Дефолт в коде |
 |------------|-----------|---------------|
 | `APP_HTTP_PORT` | `8085` | `8085` |
-| `APP_SEMGREP_CONFIG` | `/app/demo/semgrep-rules.yml` | `/app/demo/semgrep-rules.yml` |
+| `APP_SEMGREP_CONFIG` | `p/java` | `p/java` |
+| `APP_DEFAULT_SCAN_TARGET_PATH` | `/app/demo/scan-targets/WebGoat/` | `/app/demo/scan-targets/WebGoat/` |
 | `APP_SEMGREP_BINARY` | — | `semgrep` |
 
 ---
