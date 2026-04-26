@@ -5,7 +5,7 @@ import (
 	"log"
 	"time"
 
-	"mephi_vkr_aspm/services/reference-data-service/internal/service"
+	"mephi_vkr_asoc/services/reference-data-service/internal/service"
 )
 
 // Start запускает цикл: после initialDelay — полная синхронизация БДУ и NVD, затем каждые interval.

@@ -4,7 +4,7 @@ import (
 	"context"
 	"log"
 
-	"mephi_vkr_aspm/services/reference-data-service/internal/models"
+	"mephi_vkr_asoc/services/reference-data-service/internal/models"
 )
 
 type Publisher interface {

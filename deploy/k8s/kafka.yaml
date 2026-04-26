@@ -2,7 +2,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: kafka
-  namespace: aspm
+  namespace: asoc
 spec:
   ports:
     - port: 9092
@@ -14,7 +14,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: kafka
-  namespace: aspm
+  namespace: asoc
 spec:
   replicas: 1
   selector:

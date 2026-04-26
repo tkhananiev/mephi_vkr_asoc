@@ -8,11 +8,11 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"mephi_vkr_aspm/services/processing-service/internal/config"
-	"mephi_vkr_aspm/services/processing-service/internal/httpapi"
-	pkgkafka "mephi_vkr_aspm/services/processing-service/internal/kafka"
-	"mephi_vkr_aspm/services/processing-service/internal/service"
-	"mephi_vkr_aspm/services/processing-service/internal/storage/postgres"
+	"mephi_vkr_asoc/services/processing-service/internal/config"
+	"mephi_vkr_asoc/services/processing-service/internal/httpapi"
+	pkgkafka "mephi_vkr_asoc/services/processing-service/internal/kafka"
+	"mephi_vkr_asoc/services/processing-service/internal/service"
+	"mephi_vkr_asoc/services/processing-service/internal/storage/postgres"
 )
 
 type App struct {

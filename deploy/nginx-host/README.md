@@ -5,7 +5,7 @@
 ## Сборка фронта
 
 ```bash
-cd mephi_vkr_aspm/web
+cd mephi_vkr_asoc/web
 npm ci
 npm run build
 ```
@@ -15,14 +15,14 @@ npm run build
 Скопируй каталог `dist` на сервер, например:
 
 ```text
-/var/www/aspm/web/dist
+/var/www/asoc/web/dist
 ```
 
-В `aspm-site.conf` выставь `root` на этот путь (в примере по умолчанию `/var/www/aspm/web/dist`).
+В `asoc-site.conf` выставь `root` на этот путь (в примере по умолчанию `/var/www/asoc/web/dist`).
 
 ## Подключение к nginx
 
-- Скопируй `aspm-site.conf` в `sites-available`, сделай симлинк в `sites-enabled`, либо подключи `include` из основного `nginx.conf`.
+- Скопируй `asoc-site.conf` в `sites-available`, сделай симлинк в `sites-enabled`, либо подключи `include` из основного `nginx.conf`.
 - Проверка и перезагрузка:
 
 ```bash
@@ -45,7 +45,7 @@ sudo nginx -t && sudo systemctl reload nginx
 Образ с тем же `nginx` внутри контейнера и `web/nginx/default.conf` (апстримы по DNS сервисов в namespace) собирается из корня репо:
 
 ```bash
-docker build -f web/Dockerfile -t aspm/web:latest .
+docker build -f web/Dockerfile -t asoc/web:latest .
 ```
 
 Манифест `deploy/k8s/frontend.yaml` — см. `deploy/k8s/README.md`.

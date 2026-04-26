@@ -10,7 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"mephi_vkr_aspm/services/reference-data-service/internal/models"
+	"mephi_vkr_asoc/services/reference-data-service/internal/models"
 )
 
 type Repository struct {

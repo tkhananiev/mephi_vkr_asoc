@@ -3,9 +3,9 @@ services:
     image: postgres:16
     container_name: mephi-vkr-postgres
     environment:
-      POSTGRES_DB: aspm
-      POSTGRES_USER: aspm
-      POSTGRES_PASSWORD: aspm
+      POSTGRES_DB: asoc
+      POSTGRES_USER: asoc
+      POSTGRES_PASSWORD: asoc
     ports:
       - "5432:5432"
     volumes:
@@ -38,7 +38,7 @@ services:
     restart: unless-stopped
     environment:
       APP_HTTP_PORT: "8081"
-      APP_POSTGRES_DSN: postgres://aspm:aspm@postgres:5432/aspm?sslmode=disable
+      APP_POSTGRES_DSN: postgres://asoc:asoc@postgres:5432/asoc?sslmode=disable
       APP_KAFKA_BROKERS: kafka:9092
       APP_BDU_FEED_URL: https://bdu.fstec.ru/ubi/vul/rss
       # Строгая проверка с deploy/certs часто ломается (ротация Sub CA → AKI/SKI mismatch). Для фида БДУ надёжнее пропуск проверки TLS.
@@ -60,7 +60,7 @@ services:
     command: sh -c "go mod download && go run ./cmd/processing-service"
     environment:
       APP_HTTP_PORT: "8082"
-      APP_POSTGRES_DSN: postgres://aspm:aspm@postgres:5432/aspm?sslmode=disable
+      APP_POSTGRES_DSN: postgres://asoc:asoc@postgres:5432/asoc?sslmode=disable
       APP_KAFKA_BROKERS: kafka:9092
     volumes:
       - ..:/app
@@ -111,9 +111,9 @@ services:
     command: sh -c "go mod download && go run ./cmd/jira-integration-service"
     environment:
       APP_HTTP_PORT: "8083"
-      APP_POSTGRES_DSN: postgres://aspm:aspm@postgres:5432/aspm?sslmode=disable
+      APP_POSTGRES_DSN: postgres://asoc:asoc@postgres:5432/asoc?sslmode=disable
       APP_JIRA_BASE_URL: http://jira-mock:8090
-      APP_JIRA_PROJECT_KEY: ASPM
+      APP_JIRA_PROJECT_KEY: ASOC
     volumes:
       - ..:/app
     depends_on:

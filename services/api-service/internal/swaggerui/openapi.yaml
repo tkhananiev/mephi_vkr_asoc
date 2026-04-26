@@ -1,6 +1,6 @@
 openapi: 3.0.3
 info:
-  title: ASPM Public API (api-service)
+  title: ASOC Public API (api-service)
   description: |
     Единственная публичная HTTP-точка входа для клиентов: один вызов запускает цепочку
     Semgrep → обработка находок → группы → тикеты и возвращает сводный «паспорт».

@@ -131,7 +131,7 @@ func (h *Handler) handleCreateIssue(w http.ResponseWriter, r *http.Request) {
 	}
 
 	id := h.counter.Add(1)
-	key := "ASPM-" + itoa(id)
+	key := "ASOC-" + itoa(id)
 
 	h.mu.Lock()
 	h.issues = append(h.issues, mockIssue{

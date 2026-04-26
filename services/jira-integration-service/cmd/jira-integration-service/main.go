@@ -4,8 +4,8 @@ import (
 	"context"
 	"log"
 
-	"mephi_vkr_aspm/services/jira-integration-service/internal/app"
-	"mephi_vkr_aspm/services/jira-integration-service/internal/config"
+	"mephi_vkr_asoc/services/jira-integration-service/internal/app"
+	"mephi_vkr_asoc/services/jira-integration-service/internal/config"
 )
 
 func main() {

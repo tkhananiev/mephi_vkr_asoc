@@ -2,7 +2,7 @@
 
 ## Как это устроено
 
-Semgrep читает **файлы** по пути `target_path` **внутри контейнера `semgrep-service`**. На хосте это подкаталог `mephi_vkr_aspm/demo/...`, в контейнере — `/app/demo/...`. Это не DAST по URL.
+Semgrep читает **файлы** по пути `target_path` **внутри контейнера `semgrep-service`**. На хосте это подкаталог `mephi_vkr_asoc/demo/...`, в контейнере — `/app/demo/...`. Это не DAST по URL.
 
 ## OWASP WebGoat (основной сценарий в compose)
 
@@ -22,7 +22,7 @@ Semgrep читает **файлы** по пути `target_path` **внутри �
 
 ## Учебный `vulnerable-app` (короткое демо)
 
-В репозитории есть `mephi_vkr_aspm/demo/vulnerable-app` (Python) и `demo/semgrep-rules.yml`. Пример пути в контейнере: `/app/demo/vulnerable-app`, при необходимости укажите `semgrep_config` под ваши правила.
+В репозитории есть `mephi_vkr_asoc/demo/vulnerable-app` (Python) и `demo/semgrep-rules.yml`. Пример пути в контейнере: `/app/demo/vulnerable-app`, при необходимости укажите `semgrep_config` под ваши правила.
 
 ## DVWA (PHP)
 

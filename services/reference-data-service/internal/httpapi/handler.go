@@ -7,8 +7,8 @@ import (
 	"strconv"
 	"time"
 
-	"mephi_vkr_aspm/services/reference-data-service/internal/models"
-	"mephi_vkr_aspm/services/reference-data-service/internal/service"
+	"mephi_vkr_asoc/services/reference-data-service/internal/models"
+	"mephi_vkr_asoc/services/reference-data-service/internal/service"
 )
 
 // longRunningSyncContext — долгий синк без отмены при закрытии HTTP-клиента; defer cancel() в обработчике.

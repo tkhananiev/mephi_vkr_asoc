@@ -9,7 +9,7 @@ import (
 	kafkago "github.com/segmentio/kafka-go"
 	"github.com/google/uuid"
 
-	"mephi_vkr_aspm/services/api-service/internal/models"
+	"mephi_vkr_asoc/services/api-service/internal/models"
 )
 
 // IngestBridge публикует находки в Kafka и ждёт ответ в топике результатов (одна партиция).

@@ -1,6 +1,6 @@
 # Сервисы, данные и Kafka
 
-Сводные таблицы для `mephi_vkr_aspm`: вызовы между сервисами, схемы PostgreSQL и топики Kafka. За **связным текстом** про микросервисы, диаграммами и сценарием см. [`ARCHITECTURE.md`](ARCHITECTURE.md). Одна БД PostgreSQL (`aspm`), миграции в `migrations/`. Детализация полей таблиц: [`DATABASE.md`](DATABASE.md).
+Сводные таблицы для `mephi_vkr_asoc`: вызовы между сервисами, схемы PostgreSQL и топики Kafka. За **связным текстом** про микросервисы, диаграммами и сценарием см. [`ARCHITECTURE.md`](ARCHITECTURE.md). Одна БД PostgreSQL (`asoc`), миграции в `migrations/`. Детализация полей таблиц: [`DATABASE.md`](DATABASE.md).
 
 ---
 
@@ -91,8 +91,8 @@
 
 | Топик | Назначение |
 |-------|------------|
-| `aspm.findings.ingest` | Пакет находок: JSON `{"correlation_id","ingest":{scanner_name, findings[]}}`. |
-| `aspm.findings.ingest.result` | Результат: `{"correlation_id","processing":{...}}` или `"error"`. |
+| `asoc.findings.ingest` | Пакет находок: JSON `{"correlation_id","ingest":{scanner_name, findings[]}}`. |
+| `asoc.findings.ingest.result` | Результат: `{"correlation_id","processing":{...}}` или `"error"`. |
 
 | Участник | Роль |
 |----------|------|

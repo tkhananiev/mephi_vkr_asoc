@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strings"
 
-	"mephi_vkr_aspm/services/semgrep-service/internal/runner"
+	"mephi_vkr_asoc/services/semgrep-service/internal/runner"
 )
 
 type Handler struct {

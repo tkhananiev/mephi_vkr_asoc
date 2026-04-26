@@ -1,4 +1,4 @@
-module mephi_vkr_aspm/services/processing-service
+module mephi_vkr_asoc/services/processing-service
 
 go 1.23.0
 

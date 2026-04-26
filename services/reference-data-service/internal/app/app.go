@@ -8,14 +8,14 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"mephi_vkr_aspm/services/reference-data-service/internal/config"
-	"mephi_vkr_aspm/services/reference-data-service/internal/httpapi"
-	"mephi_vkr_aspm/services/reference-data-service/internal/kafka"
-	"mephi_vkr_aspm/services/reference-data-service/internal/scheduler"
-	"mephi_vkr_aspm/services/reference-data-service/internal/service"
-	"mephi_vkr_aspm/services/reference-data-service/internal/source/bdu"
-	"mephi_vkr_aspm/services/reference-data-service/internal/source/nvd"
-	"mephi_vkr_aspm/services/reference-data-service/internal/storage/postgres"
+	"mephi_vkr_asoc/services/reference-data-service/internal/config"
+	"mephi_vkr_asoc/services/reference-data-service/internal/httpapi"
+	"mephi_vkr_asoc/services/reference-data-service/internal/kafka"
+	"mephi_vkr_asoc/services/reference-data-service/internal/scheduler"
+	"mephi_vkr_asoc/services/reference-data-service/internal/service"
+	"mephi_vkr_asoc/services/reference-data-service/internal/source/bdu"
+	"mephi_vkr_asoc/services/reference-data-service/internal/source/nvd"
+	"mephi_vkr_asoc/services/reference-data-service/internal/storage/postgres"
 )
 
 type App struct {

@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"strings"
 
-	"mephi_vkr_aspm/services/processing-service/internal/models"
-	"mephi_vkr_aspm/services/processing-service/internal/repository"
+	"mephi_vkr_asoc/services/processing-service/internal/models"
+	"mephi_vkr_asoc/services/processing-service/internal/repository"
 )
 
 type ProcessingService struct {

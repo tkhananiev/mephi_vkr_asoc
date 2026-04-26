@@ -1,4 +1,4 @@
-# Сборка из корня репозитория: docker build -f web/Dockerfile -t aspm/web:latest .
+# Сборка из корня репозитория: docker build -f web/Dockerfile -t asoc/web:latest .
 FROM node:20-alpine AS build
 WORKDIR /app
 COPY web/package.json web/package-lock.json* ./

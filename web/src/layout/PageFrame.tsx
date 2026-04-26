@@ -17,7 +17,7 @@ export function PageFrame({
   return (
     <>
       <header className="topbar">
-        <div className="topbar-left">ASPM</div>
+        <div className="topbar-left">ASOC</div>
         {badge ? <span className="topbar-pill">{badge}</span> : null}
       </header>
       <main className="page">

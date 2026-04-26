@@ -1,3 +1,3 @@
-module mephi_vkr_aspm/services/jira-mock
+module mephi_vkr_asoc/services/jira-mock
 
 go 1.23.0

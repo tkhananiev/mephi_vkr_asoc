@@ -9,9 +9,9 @@
 
 | Сервис | Переменная | Значение в compose |
 |--------|------------|-------------------|
-| `postgres` | `POSTGRES_DB` | `aspm` |
-| | `POSTGRES_USER` | `aspm` |
-| | `POSTGRES_PASSWORD` | `aspm` |
+| `postgres` | `POSTGRES_DB` | `asoc` |
+| | `POSTGRES_USER` | `asoc` |
+| | `POSTGRES_PASSWORD` | `asoc` |
 | `kafka` | см. `deploy/docker-compose.yml` | настройки брокера KRaft |
 
 ---
@@ -27,8 +27,8 @@
 | `APP_JIRA_SERVICE_URL` | `http://jira-integration-service:8083` | `http://localhost:8083` |
 | `APP_SEMGREP_SERVICE_URL` | `http://semgrep-service:8085` | `http://localhost:8085` |
 | `APP_KAFKA_BROKERS` | `kafka:9092` | _(пусто)_ |
-| `APP_KAFKA_TOPIC_FINDINGS_INGEST` | — | `aspm.findings.ingest` |
-| `APP_KAFKA_TOPIC_FINDINGS_RESULT` | — | `aspm.findings.ingest.result` |
+| `APP_KAFKA_TOPIC_FINDINGS_INGEST` | — | `asoc.findings.ingest` |
+| `APP_KAFKA_TOPIC_FINDINGS_RESULT` | — | `asoc.findings.ingest.result` |
 | `APP_DEFAULT_SCAN_TARGET_PATH` | `/app/demo/scan-targets/WebGoat` | _(пусто)_ |
 | `APP_DEFAULT_SEMGREP_CONFIG` | `p/java` | _(пусто)_ |
 | `APP_AUTH_API_KEY` | в `deploy/k8s` из Secret | _(пусто)_ — если задано, для `POST/PUT/DELETE /api/*` нужен заголовок `Authorization: Bearer <ключ>` или `X-API-Key`; `/health` и Swagger без ключа |
@@ -44,7 +44,7 @@
 | Переменная | В compose | Дефолт в коде |
 |------------|-----------|---------------|
 | `APP_HTTP_PORT` | `8081` | `8081` |
-| `APP_POSTGRES_DSN` | `postgres://aspm:aspm@postgres:5432/aspm?sslmode=disable` | `postgres://aspm:aspm@localhost:5432/aspm?sslmode=disable` |
+| `APP_POSTGRES_DSN` | `postgres://asoc:asoc@postgres:5432/asoc?sslmode=disable` | `postgres://asoc:asoc@localhost:5432/asoc?sslmode=disable` |
 | `APP_KAFKA_BROKERS` | `kafka:9092` | `localhost:9092` |
 | `APP_BDU_FEED_URL` | `https://bdu.fstec.ru/ubi/vul/rss` | RSS 2.0 ленты уязвимостей. Путь `/feed` отдаёт HTML «список каналов»; если в конфиге остался `.../feed`, клиент после неуспешного разбора XML сам пробует `.../ubi/vul/rss` (только `bdu.fstec.ru`) |
 | `APP_BDU_ROOT_CA_FILE` | — | _(пусто)_; опционально PEM (корень+sub); при ротации УЦ может не совпасть с листом ФСТЭК |
@@ -67,10 +67,10 @@
 | Переменная | В compose | Дефолт в коде |
 |------------|-----------|---------------|
 | `APP_HTTP_PORT` | `8082` | `8082` |
-| `APP_POSTGRES_DSN` | `postgres://aspm:aspm@postgres:5432/aspm?sslmode=disable` | `postgres://aspm:aspm@localhost:5432/aspm?sslmode=disable` |
+| `APP_POSTGRES_DSN` | `postgres://asoc:asoc@postgres:5432/asoc?sslmode=disable` | `postgres://asoc:asoc@localhost:5432/asoc?sslmode=disable` |
 | `APP_KAFKA_BROKERS` | `kafka:9092` | _(пусто)_ |
-| `APP_KAFKA_TOPIC_FINDINGS_INGEST` | — | `aspm.findings.ingest` |
-| `APP_KAFKA_TOPIC_FINDINGS_RESULT` | — | `aspm.findings.ingest.result` |
+| `APP_KAFKA_TOPIC_FINDINGS_INGEST` | — | `asoc.findings.ingest` |
+| `APP_KAFKA_TOPIC_FINDINGS_RESULT` | — | `asoc.findings.ingest.result` |
 
 ---
 
@@ -93,9 +93,9 @@
 | Переменная | В compose | Дефолт в коде |
 |------------|-----------|---------------|
 | `APP_HTTP_PORT` | `8083` | `8083` |
-| `APP_POSTGRES_DSN` | `postgres://aspm:aspm@postgres:5432/aspm?sslmode=disable` | `postgres://aspm:aspm@localhost:5432/aspm?sslmode=disable` |
+| `APP_POSTGRES_DSN` | `postgres://asoc:asoc@postgres:5432/asoc?sslmode=disable` | `postgres://asoc:asoc@localhost:5432/asoc?sslmode=disable` |
 | `APP_JIRA_BASE_URL` | `http://jira-mock:8090` | `https://example.atlassian.net` |
-| `APP_JIRA_PROJECT_KEY` | `ASPM` | `ASPM` |
+| `APP_JIRA_PROJECT_KEY` | `ASOC` | `ASOC` |
 
 ---
 
@@ -109,4 +109,4 @@
 | `APP_JIRA_PUBLIC_BASE_URL` | База для поля `self` при создании issue: `{base}/browse/{KEY}` — для VPS задай **http://ваш-ip:8090**, иначе по умолчанию `http://localhost:8090`. |
 
 - **`GET /console`** — список всех тикетов, созданных в этом процессе mock (память; после перезапуска контейнера список пустой).
-- **`GET /browse/ASPM-N`** — карточка задачи (ссылка с `/console` или из поля `self` в API).
+- **`GET /browse/ASOC-N`** — карточка задачи (ссылка с `/console` или из поля `self` в API).

@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"mephi_vkr_aspm/services/jira-integration-service/internal/models"
-	"mephi_vkr_aspm/services/jira-integration-service/internal/repository"
+	"mephi_vkr_asoc/services/jira-integration-service/internal/models"
+	"mephi_vkr_asoc/services/jira-integration-service/internal/repository"
 )
 
 type TicketService struct {

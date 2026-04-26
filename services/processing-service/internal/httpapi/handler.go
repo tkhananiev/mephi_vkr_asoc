@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"strconv"
 
-	"mephi_vkr_aspm/services/processing-service/internal/models"
-	"mephi_vkr_aspm/services/processing-service/internal/service"
+	"mephi_vkr_asoc/services/processing-service/internal/models"
+	"mephi_vkr_asoc/services/processing-service/internal/service"
 )
 
 type Handler struct {

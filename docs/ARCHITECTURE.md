@@ -1,4 +1,4 @@
-# Архитектура `mephi_vkr_aspm`
+# Архитектура `mephi_vkr_asoc`
 
 Документ описывает **реализованный в репозитории** контур: микросервисы, обмен по HTTP и Kafka, общую PostgreSQL и типовой сценарий «сканирование → обработка находок → корреляция со справочником → группы → тикет в Jira». Поднять стенд: `deploy/docker-compose.yml`, пошагово — `demo/DEMO.md`. Развёртывание в **Kubernetes**: `deploy/k8s` (Kustomize, Postgres + Kafka + те же сервисы; **api-service** с опциональным ключом `APP_AUTH_API_KEY`, см. `deploy/k8s/README.md`). Исходники диаграмм (Mermaid): `docs/diagrams/` (`system_overview.mmd`, `kafka_app_flow.mmd`, `kafka_read_write.mmd`).
 
@@ -50,7 +50,7 @@ flowchart TB
     JINT["jira-integration-service :8083"]
     MOCK["jira-mock :8090"]
   end
-  DB[("PostgreSQL :5432<br/>aspm")]
+  DB[("PostgreSQL :5432<br/>asoc")]
   subgraph ref["Справочник CVE / БДУ"]
     REF["reference-data-service :8081"]
     NVD["БДУ / NVD HTTPS"]
@@ -86,7 +86,7 @@ flowchart LR
   Client[HTTP клиент]
   API[api-service]
   SG[semgrep-service]
-  K[Kafka<br/>aspm.findings.ingest<br/>aspm.findings.ingest.result]
+  K[Kafka<br/>asoc.findings.ingest<br/>asoc.findings.ingest.result]
   PR[processing-service]
   RD[reference-data-service]
   JI[jira-integration-service]
@@ -114,8 +114,8 @@ flowchart LR
 ```mermaid
 flowchart TB
   subgraph kafka_topics["Топики"]
-    ING["aspm.findings.ingest"]
-    RES["aspm.findings.ingest.result"]
+    ING["asoc.findings.ingest"]
+    RES["asoc.findings.ingest.result"]
   end
   API["api-service"]
   PR["processing-service"]
@@ -135,8 +135,8 @@ flowchart TB
 
 | Топик | Роль |
 |-------|------|
-| **`aspm.findings.ingest`** | Пакет находок от `api-service`: в теле есть `correlation_id` и JSON ingest. |
-| **`aspm.findings.ingest.result`** | Ответ `processing-service`: тот же `correlation_id` и результат пайплайна (или ошибка). |
+| **`asoc.findings.ingest`** | Пакет находок от `api-service`: в теле есть `correlation_id` и JSON ingest. |
+| **`asoc.findings.ingest.result`** | Ответ `processing-service`: тот же `correlation_id` и результат пайплайна (или ошибка). |
 
 **Паттерн:** request-reply через два топика с одной партицией на топик: `api-service` **публикует** ingest и **ждёт** сообщение в `ingest.result` с тем же `correlation_id`; `processing-service` **потребляет** ingest (consumer group `processing-findings-ingest`), выполняет тот же код, что и HTTP `POST /api/v1/findings/ingest`, и **публикует** результат.
 
@@ -154,7 +154,7 @@ flowchart TB
 
 1. Клиент вызывает `POST /api/v1/scans/semgrep` на `api-service` (цель и правила можно опустить — подставятся **`APP_DEFAULT_SCAN_TARGET_PATH`** и **`APP_DEFAULT_SEMGREP_CONFIG`** из compose).
 2. `api-service` вызывает `POST /api/v1/scan` на `semgrep-service`, получает JSON находок.
-3. `api-service` передаёт ingest в **`processing-service`**: при Kafka — через топики **`aspm.findings.ingest` → `aspm.findings.ingest.result`**, иначе — **`POST /api/v1/findings/ingest`**.
+3. `api-service` передаёт ingest в **`processing-service`**: при Kafka — через топики **`asoc.findings.ingest` → `asoc.findings.ingest.result`**, иначе — **`POST /api/v1/findings/ingest`**.
 4. `processing-service` пишет находки и уязвимости, **читает `catalog.*` в PostgreSQL** для сопоставления по CVE/CWE, выполняет группировку.
 5. `api-service` запрашивает `GET /api/v1/groups` у `processing-service`, затем `POST /api/v1/tickets` у `jira-integration-service`.
 6. `jira-integration-service` обращается к Jira (на стенде — `jira-mock`), сохраняет связь в `integration.ticket_links`.

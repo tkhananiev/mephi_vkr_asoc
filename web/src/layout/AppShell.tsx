@@ -17,7 +17,7 @@ export function AppShell() {
         <div className="sidebar-brand">
           <BrandLogo size={40} />
           <div className="sidebar-brand-text">
-            <div className="sidebar-brand-title">ASPM</div>
+            <div className="sidebar-brand-title">ASOC</div>
             <div className="sidebar-brand-sub">orchestrated security findings → tickets</div>
           </div>
         </div>

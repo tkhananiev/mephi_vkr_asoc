@@ -1,6 +1,6 @@
 {
   "info": {
-    "name": "MEPHI VKR ASPM Demo",
+    "name": "MEPHI VKR ASOC Demo",
     "description": "Перед Run Semgrep выполните demo/scan-targets/clone-webgoat.sh. При пустом target_path подставляются APP_DEFAULT_* (WebGoat + p/java).",
     "_postman_id": "c83f88a6-7d86-45f9-a5d2-0b7c6d67b6d2",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"

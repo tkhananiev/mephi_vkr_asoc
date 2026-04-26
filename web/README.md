@@ -8,7 +8,7 @@
 
 ## Запуск в разработке
 
-Из корня `mephi_vkr_aspm` (после `docker compose up` backend):
+Из корня `mephi_vkr_asoc` (после `docker compose up` backend):
 
 ```bash
 cd web

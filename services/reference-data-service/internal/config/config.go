@@ -27,7 +27,7 @@ type Config struct {
 func Load() Config {
 	return Config{
 		HTTPPort:             getEnv("APP_HTTP_PORT", "8081"),
-		PostgresDSN:          getEnv("APP_POSTGRES_DSN", "postgres://aspm:aspm@localhost:5432/aspm?sslmode=disable"),
+		PostgresDSN:          getEnv("APP_POSTGRES_DSN", "postgres://asoc:asoc@localhost:5432/asoc?sslmode=disable"),
 		KafkaBrokers:         splitCSV(getEnv("APP_KAFKA_BROKERS", "localhost:9092")),
 		BDUFeedURL:           getEnv("APP_BDU_FEED_URL", "https://bdu.fstec.ru/ubi/vul/rss"),
 		BDUInsecure:          getBool("APP_BDU_INSECURE_SKIP_VERIFY", true),

@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	apikafka "mephi_vkr_aspm/services/api-service/internal/kafka"
-	"mephi_vkr_aspm/services/api-service/internal/models"
+	apikafka "mephi_vkr_asoc/services/api-service/internal/kafka"
+	"mephi_vkr_asoc/services/api-service/internal/models"
 )
 
 type Orchestrator struct {

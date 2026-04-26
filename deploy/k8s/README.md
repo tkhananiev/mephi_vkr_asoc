@@ -1,19 +1,19 @@
-# Kubernetes (контур ASPM)
+# Kubernetes (контур ASOC)
 
 Манифесты в стиле **Kustomize**: Postgres + Kafka + микросервисы. Публичное **api-service** защищено переменной **`APP_AUTH_API_KEY`** (см. Secret).
 
 ## 1. Сборка образов
 
-Из **корня репозитория** `mephi_vkr_aspm`:
+Из **корня репозитория** `mephi_vkr_asoc`:
 
 ```bash
-docker build -f services/api-service/Dockerfile -t aspm/api-service:latest .
-docker build -f services/reference-data-service/Dockerfile -t aspm/reference-data-service:latest .
-docker build -f services/processing-service/Dockerfile -t aspm/processing-service:latest .
-docker build -f services/semgrep-service/Dockerfile -t aspm/semgrep-service:latest .
-docker build -f services/jira-integration-service/Dockerfile -t aspm/jira-integration-service:latest .
-docker build -f services/jira-mock/Dockerfile -t aspm/jira-mock:latest .
-docker build -f web/Dockerfile -t aspm/web:latest .
+docker build -f services/api-service/Dockerfile -t asoc/api-service:latest .
+docker build -f services/reference-data-service/Dockerfile -t asoc/reference-data-service:latest .
+docker build -f services/processing-service/Dockerfile -t asoc/processing-service:latest .
+docker build -f services/semgrep-service/Dockerfile -t asoc/semgrep-service:latest .
+docker build -f services/jira-integration-service/Dockerfile -t asoc/jira-integration-service:latest .
+docker build -f services/jira-mock/Dockerfile -t asoc/jira-mock:latest .
+docker build -f web/Dockerfile -t asoc/web:latest .
 ```
 
 **minikube:** `eval $(minikube docker-env)` перед `docker build`, и в манифестах оставьте `imagePullPolicy: IfNotPresent`.
@@ -36,14 +36,14 @@ kubectl apply -f deploy/k8s/secret.yaml
 kubectl apply --load-restrictor=LoadRestrictionsNone -k deploy/k8s
 ```
 
-## 4. Фронт (aspm-web)
+## 4. Фронт (asoc-web)
 
-После `kubectl apply` в кластере появляется `Deployment`/`Service` **aspm-web** (один `nginx` с собранной статикой и прокси на бэкенды по внутренним DNS-именам, см. `web/nginx/default.conf`).
+После `kubectl apply` в кластере появляется `Deployment`/`Service` **asoc-web** (один `nginx` с собранной статикой и прокси на бэкенды по внутренним DNS-именам, см. `web/nginx/default.conf`).
 
 Проброс в браузер:
 
 ```bash
-kubectl -n aspm port-forward svc/aspm-web 8088:80
+kubectl -n asoc port-forward svc/asoc-web 8088:80
 ```
 
 Открой `http://127.0.0.1:8088/`. API и Swagger с того же origin идут через тот же под.
@@ -53,7 +53,7 @@ kubectl -n aspm port-forward svc/aspm-web 8088:80
 Проброс порта:
 
 ```bash
-kubectl -n aspm port-forward svc/api-service 8080:8080
+kubectl -n asoc port-forward svc/api-service 8080:8080
 ```
 
 Вызов сценария (подставьте ключ из Secret):

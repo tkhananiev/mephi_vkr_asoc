@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"mephi_vkr_aspm/services/jira-integration-service/internal/models"
-	"mephi_vkr_aspm/services/jira-integration-service/internal/service"
+	"mephi_vkr_asoc/services/jira-integration-service/internal/models"
+	"mephi_vkr_asoc/services/jira-integration-service/internal/service"
 )
 
 type Handler struct {

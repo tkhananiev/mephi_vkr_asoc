@@ -3,7 +3,7 @@ package repository
 import (
 	"context"
 
-	"mephi_vkr_aspm/services/jira-integration-service/internal/models"
+	"mephi_vkr_asoc/services/jira-integration-service/internal/models"
 )
 
 type TicketRepository interface {

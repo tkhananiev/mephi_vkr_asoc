@@ -1,35 +1,35 @@
-# Статика + reverse proxy (см. web/nginx/default.conf). Образ: docker build -f web/Dockerfile -t aspm/web:latest .
+# Статика + reverse proxy (см. web/nginx/default.conf). Образ: docker build -f web/Dockerfile -t asoc/web:latest .
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: aspm-web
-  namespace: aspm
+  name: asoc-web
+  namespace: asoc
 spec:
   ports:
     - port: 80
       targetPort: 80
   selector:
-    app: aspm-web
+    app: asoc-web
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: aspm-web
-  namespace: aspm
+  name: asoc-web
+  namespace: asoc
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: aspm-web
+      app: asoc-web
   template:
     metadata:
       labels:
-        app: aspm-web
+        app: asoc-web
     spec:
       containers:
         - name: web
-          image: aspm/web:latest
+          image: asoc/web:latest
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 80

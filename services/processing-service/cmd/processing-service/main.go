@@ -4,8 +4,8 @@ import (
 	"context"
 	"log"
 
-	"mephi_vkr_aspm/services/processing-service/internal/app"
-	"mephi_vkr_aspm/services/processing-service/internal/config"
+	"mephi_vkr_asoc/services/processing-service/internal/app"
+	"mephi_vkr_asoc/services/processing-service/internal/config"
 )
 
 func main() {

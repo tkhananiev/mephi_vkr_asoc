@@ -3,8 +3,8 @@ package main
 import (
 	"log"
 
-	"mephi_vkr_aspm/services/api-service/internal/app"
-	"mephi_vkr_aspm/services/api-service/internal/config"
+	"mephi_vkr_asoc/services/api-service/internal/app"
+	"mephi_vkr_asoc/services/api-service/internal/config"
 )
 
 func main() {

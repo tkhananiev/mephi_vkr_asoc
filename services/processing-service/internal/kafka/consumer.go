@@ -7,10 +7,10 @@ import (
 
 	kafkago "github.com/segmentio/kafka-go"
 
-	"mephi_vkr_aspm/services/processing-service/internal/service"
+	"mephi_vkr_asoc/services/processing-service/internal/service"
 )
 
-// IngestConsumer читает aspm.findings.ingest и публикует результат в aspm.findings.ingest.result.
+// IngestConsumer читает asoc.findings.ingest и публикует результат в asoc.findings.ingest.result.
 type IngestConsumer struct {
 	brokers     []string
 	ingestTopic string

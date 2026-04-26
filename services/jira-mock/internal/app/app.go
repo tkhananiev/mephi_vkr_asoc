@@ -5,8 +5,8 @@ import (
 	"log"
 	"net/http"
 
-	"mephi_vkr_aspm/services/jira-mock/internal/config"
-	"mephi_vkr_aspm/services/jira-mock/internal/httpapi"
+	"mephi_vkr_asoc/services/jira-mock/internal/config"
+	"mephi_vkr_asoc/services/jira-mock/internal/httpapi"
 )
 
 type App struct {

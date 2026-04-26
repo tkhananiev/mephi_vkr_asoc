@@ -7,10 +7,10 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"mephi_vkr_aspm/services/jira-integration-service/internal/config"
-	"mephi_vkr_aspm/services/jira-integration-service/internal/httpapi"
-	"mephi_vkr_aspm/services/jira-integration-service/internal/service"
-	"mephi_vkr_aspm/services/jira-integration-service/internal/storage/postgres"
+	"mephi_vkr_asoc/services/jira-integration-service/internal/config"
+	"mephi_vkr_asoc/services/jira-integration-service/internal/httpapi"
+	"mephi_vkr_asoc/services/jira-integration-service/internal/service"
+	"mephi_vkr_asoc/services/jira-integration-service/internal/storage/postgres"
 )
 
 type App struct {

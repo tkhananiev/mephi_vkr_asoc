@@ -4,9 +4,9 @@ import (
 	"log"
 	"net/http"
 
-	"mephi_vkr_aspm/services/semgrep-service/internal/config"
-	"mephi_vkr_aspm/services/semgrep-service/internal/httpapi"
-	"mephi_vkr_aspm/services/semgrep-service/internal/runner"
+	"mephi_vkr_asoc/services/semgrep-service/internal/config"
+	"mephi_vkr_asoc/services/semgrep-service/internal/httpapi"
+	"mephi_vkr_asoc/services/semgrep-service/internal/runner"
 )
 
 type App struct {

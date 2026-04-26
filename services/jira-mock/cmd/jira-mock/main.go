@@ -3,8 +3,8 @@ package main
 import (
 	"log"
 
-	"mephi_vkr_aspm/services/jira-mock/internal/app"
-	"mephi_vkr_aspm/services/jira-mock/internal/config"
+	"mephi_vkr_asoc/services/jira-mock/internal/app"
+	"mephi_vkr_asoc/services/jira-mock/internal/config"
 )
 
 func main() {

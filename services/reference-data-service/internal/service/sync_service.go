@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"log"
 
-	"mephi_vkr_aspm/services/reference-data-service/internal/kafka"
-	"mephi_vkr_aspm/services/reference-data-service/internal/models"
-	"mephi_vkr_aspm/services/reference-data-service/internal/repository"
+	"mephi_vkr_asoc/services/reference-data-service/internal/kafka"
+	"mephi_vkr_asoc/services/reference-data-service/internal/models"
+	"mephi_vkr_asoc/services/reference-data-service/internal/repository"
 )
 
 type SourceClient interface {

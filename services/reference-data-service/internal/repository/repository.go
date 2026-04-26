@@ -3,7 +3,7 @@ package repository
 import (
 	"context"
 
-	"mephi_vkr_aspm/services/reference-data-service/internal/models"
+	"mephi_vkr_asoc/services/reference-data-service/internal/models"
 )
 
 type ReferenceRepository interface {

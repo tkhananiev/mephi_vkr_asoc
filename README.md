@@ -1,4 +1,4 @@
-# mephi_vkr_aspm
+# mephi_vkr_asoc
 
 MVP для управления уязвимостями: микросервисы на Go, общая PostgreSQL, Kafka для асинхронного ingest находок, сценарий сканирования Semgrep и постановки тикетов в Jira (на стенде — мок). Запуск backend: `deploy/docker-compose.yml`. Браузерный клиент — **`web/`** (React + Vite), вызывает те же REST API, что и сценарии в `demo/DEMO.md`. Дополнительно сценарий можно проходить через `curl`/Postman и при необходимости смотреть таблицы в PostgreSQL.
 
@@ -46,7 +46,7 @@ MVP для управления уязвимостями: микросервис
 Клиент (HTTP)
   -> api-service (POST /api/v1/scans/semgrep; по умолчанию цель WebGoat + p/java через APP_DEFAULT_*)
   -> semgrep-service (POST /api/v1/scan; Semgrep в отдельном контейнере)
-  -> api-service -> Kafka (aspm.findings.ingest) -> processing-service -> Kafka (aspm.findings.ingest.result); корреляция по CVE/CWE через PostgreSQL / catalog.* [или HTTP ingest без Kafka, если APP_KAFKA_BROKERS не задан]
+  -> api-service -> Kafka (asoc.findings.ingest) -> processing-service -> Kafka (asoc.findings.ingest.result); корреляция по CVE/CWE через PostgreSQL / catalog.* [или HTTP ingest без Kafka, если APP_KAFKA_BROKERS не задан]
   -> api-service -> GET groups -> POST /api/v1/tickets
   -> jira-integration-service -> jira-mock (на стенде)
 ```
@@ -86,4 +86,4 @@ Semgrep в контейнере **`semgrep-service`** читает **файлы*
 
 - инструкция: `demo/DEMO.md`
 - curl-сценарий: `demo/curl-demo.sh`
-- примеры HTTP-запросов (коллекция для импорта в средства тестирования API): `demo/http-collection/MEPHI_VKR_ASPM_http_collection.json`
+- примеры HTTP-запросов (коллекция для импорта в средства тестирования API): `demo/http-collection/MEPHI_VKR_ASOC_http_collection.json`

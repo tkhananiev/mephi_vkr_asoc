@@ -29,7 +29,7 @@ func WithAPIKeyAuth(apiKey string, next http.Handler) http.Handler {
 			return
 		}
 		if !matchSecret(r, want) {
-			w.Header().Set("WWW-Authenticate", `Bearer realm="aspm"`)
+			w.Header().Set("WWW-Authenticate", `Bearer realm="asoc"`)
 			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 			return
 		}

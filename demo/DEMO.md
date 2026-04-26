@@ -29,7 +29,7 @@ curl --max-time 0 -X POST "http://localhost:8081/api/v1/sync/nvd"
 
 ### SQL: сколько записей CVE (NVD) и БДУ
 
-Подключение к БД из compose: хост `localhost`, порт `5432`, БД `aspm`, пользователь `aspm` / пароль `aspm` (см. `deploy/docker-compose.yml`).
+Подключение к БД из compose: хост `localhost`, порт `5432`, БД `asoc`, пользователь `asoc` / пароль `asoc` (см. `deploy/docker-compose.yml`).
 
 ```sql
 -- CVE-каталог (источник NVD)

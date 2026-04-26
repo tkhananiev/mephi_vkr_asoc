@@ -1,4 +1,4 @@
-module mephi_vkr_aspm/services/reference-data-service
+module mephi_vkr_asoc/services/reference-data-service
 
 go 1.23.0
 

@@ -6,7 +6,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"mephi_vkr_aspm/services/processing-service/internal/models"
+	"mephi_vkr_asoc/services/processing-service/internal/models"
 )
 
 type Repository struct {

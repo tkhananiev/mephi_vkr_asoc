@@ -3,7 +3,7 @@ package repository
 import (
 	"context"
 
-	"mephi_vkr_aspm/services/processing-service/internal/models"
+	"mephi_vkr_asoc/services/processing-service/internal/models"
 )
 
 type ProcessingRepository interface {

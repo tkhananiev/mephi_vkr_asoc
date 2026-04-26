@@ -7,11 +7,11 @@ import (
 	"net/http"
 	"time"
 
-	"mephi_vkr_aspm/services/api-service/internal/config"
-	"mephi_vkr_aspm/services/api-service/internal/httpapi"
-	pkgkafka "mephi_vkr_aspm/services/api-service/internal/kafka"
-	"mephi_vkr_aspm/services/api-service/internal/service"
-	"mephi_vkr_aspm/services/api-service/internal/swaggerui"
+	"mephi_vkr_asoc/services/api-service/internal/config"
+	"mephi_vkr_asoc/services/api-service/internal/httpapi"
+	pkgkafka "mephi_vkr_asoc/services/api-service/internal/kafka"
+	"mephi_vkr_asoc/services/api-service/internal/service"
+	"mephi_vkr_asoc/services/api-service/internal/swaggerui"
 )
 
 type App struct {

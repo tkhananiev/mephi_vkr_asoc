@@ -5,7 +5,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"mephi_vkr_aspm/services/jira-integration-service/internal/models"
+	"mephi_vkr_asoc/services/jira-integration-service/internal/models"
 )
 
 type Repository struct {
