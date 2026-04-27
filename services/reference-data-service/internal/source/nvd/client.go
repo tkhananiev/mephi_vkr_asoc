@@ -16,7 +16,7 @@ import (
 const (
 	maxResultsPerPageNVD = 2000
 	// NVD: без ключа ~5 запросов / 30 с; с ключом ~50 / 30 с.
-	throttleNoAPIKey  = 6 * time.Second
+	throttleNoAPIKey   = 6 * time.Second
 	throttleWithAPIKey = 650 * time.Millisecond
 )
 
@@ -34,11 +34,11 @@ type apiResponse struct {
 	StartIndex      int `json:"startIndex"`
 	Vulnerabilities []struct {
 		CVE struct {
-			ID               string `json:"id"`
-			Published        string `json:"published"`
-			LastModified     string `json:"lastModified"`
-			VulnStatus       string `json:"vulnStatus"`
-			Descriptions     []struct {
+			ID           string `json:"id"`
+			Published    string `json:"published"`
+			LastModified string `json:"lastModified"`
+			VulnStatus   string `json:"vulnStatus"`
+			Descriptions []struct {
 				Lang  string `json:"lang"`
 				Value string `json:"value"`
 			} `json:"descriptions"`
@@ -190,7 +190,8 @@ func (c *Client) doGET(ctx context.Context, url string) (*apiResponse, error) {
 
 	if resp.StatusCode >= 300 {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 2048))
-		return nil, fmt.Errorf("nvd api returned status %d: %s", resp.StatusCode, string(bytes.TrimSpace(body)))
+		snippet := string(bytes.TrimSpace(body))
+		return nil, fmt.Errorf("nvd api returned status %d: %s", resp.StatusCode, snippet)
 	}
 
 	body, err := io.ReadAll(resp.Body)
