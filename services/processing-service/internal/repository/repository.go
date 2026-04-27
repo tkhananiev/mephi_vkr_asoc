@@ -17,4 +17,5 @@ type ProcessingRepository interface {
 	UpsertGroup(ctx context.Context, groupKey, severity, groupingRule string) (int64, bool, error)
 	LinkGroupToVulnerability(ctx context.Context, groupID, vulnerabilityID int64) error
 	ListGroups(ctx context.Context, limit int) ([]models.VulnerabilityGroup, error)
+	ListVulnerabilityReport(ctx context.Context, limit int) ([]models.VulnerabilityReportRow, error)
 }

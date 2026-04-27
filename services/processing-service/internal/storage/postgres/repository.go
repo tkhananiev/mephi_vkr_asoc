@@ -3,7 +3,9 @@ package postgres
 import (
 	"context"
 	"strings"
+	"time"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"mephi_vkr_asoc/services/processing-service/internal/models"
@@ -197,4 +199,72 @@ func (r *Repository) ListGroups(ctx context.Context, limit int) ([]models.Vulner
 		result = append(result, item)
 	}
 	return result, rows.Err()
+}
+
+func (r *Repository) ListVulnerabilityReport(ctx context.Context, limit int) ([]models.VulnerabilityReportRow, error) {
+	if limit <= 0 || limit > 500 {
+		limit = 200
+	}
+	rows, err := r.pool.Query(ctx, `
+		WITH scanner_pick AS (
+			SELECT DISTINCT ON (fv.vulnerability_id)
+				fv.vulnerability_id,
+				f.scanner_name,
+				pr.started_at AS run_started_at
+			FROM core.finding_vulnerabilities fv
+			JOIN core.findings f ON f.id = fv.finding_id
+			LEFT JOIN core.processing_runs pr ON pr.id = f.processing_run_id
+			ORDER BY fv.vulnerability_id, pr.started_at DESC NULLS LAST, f.id DESC
+		)
+		SELECT
+			g.id,
+			g.group_key,
+			v.id,
+			COALESCE(v.cve_id, ''),
+			CASE WHEN rr.source_code LIKE 'bdu%' THEN COALESCE(rr.external_id, '') ELSE '' END,
+			COALESCE(sp.scanner_name, ''),
+			COALESCE(v.product, ''),
+			COALESCE(v.version, ''),
+			COALESCE(v.normalized_severity, ''),
+			sp.run_started_at,
+			COALESCE(rr.source_code, '')
+		FROM core.vulnerabilities v
+		JOIN core.group_vulnerabilities gv ON gv.vulnerability_id = v.id
+		JOIN core.vulnerability_groups g ON g.id = gv.group_id
+		LEFT JOIN catalog.reference_records rr ON rr.id = v.reference_record_id
+		LEFT JOIN scanner_pick sp ON sp.vulnerability_id = v.id
+		ORDER BY g.id, v.id
+		LIMIT $1
+	`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := make([]models.VulnerabilityReportRow, 0, min(limit, 64))
+	for rows.Next() {
+		var row models.VulnerabilityReportRow
+		var ts pgtype.Timestamptz
+		if err := rows.Scan(
+			&row.GroupID,
+			&row.GroupKey,
+			&row.VulnerabilityID,
+			&row.CVE,
+			&row.BDUID,
+			&row.ScannerName,
+			&row.AssetPath,
+			&row.Version,
+			&row.Severity,
+			&ts,
+			&row.CatalogSource,
+		); err != nil {
+			return nil, err
+		}
+		if ts.Valid {
+			t := ts.Time.In(time.UTC)
+			row.RunAt = &t
+		}
+		out = append(out, row)
+	}
+	return out, rows.Err()
 }

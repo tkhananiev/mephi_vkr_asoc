@@ -72,3 +72,18 @@ type ProcessingResult struct {
 	VulnerabilitiesCreated int   `json:"vulnerabilities_created"`
 	GroupsUpdated          int   `json:"groups_updated"`
 }
+
+// VulnerabilityReportRow — одна строка отчёта: одна уязвимость, с привязкой к группе.
+type VulnerabilityReportRow struct {
+	GroupID         int64      `json:"group_id"`
+	GroupKey        string     `json:"group_key"`
+	VulnerabilityID int64      `json:"vulnerability_id"`
+	CVE             string     `json:"cve"`
+	BDUID           string     `json:"bdu_id"`
+	ScannerName     string     `json:"scanner_name"`
+	AssetPath       string     `json:"asset_path"`
+	Version         string     `json:"version"`
+	Severity        string     `json:"severity"`
+	RunAt           *time.Time `json:"run_at,omitempty"`
+	CatalogSource   string     `json:"catalog_source,omitempty"`
+}

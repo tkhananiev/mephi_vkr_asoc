@@ -9,7 +9,7 @@
 | Сервис | Порт | Вход (кто дергает) | Исходящие вызовы | Куда пишет результат |
 |--------|------|-------------------|------------------|----------------------|
 | **reference-data-service** | 8081 | HTTP: `POST /api/v1/sync/*`, `GET /api/v1/sync/runs`, планировщик синка (если включён) | HTTPS: фид БДУ ФСТЭК (`APP_BDU_FEED_URL`), NVD API 2.0 (`APP_NVD_API_BASE_URL`) | PostgreSQL: `audit.*`, `raw.*`, `catalog.*`. Kafka: **нет** (noop-publisher, только лог) |
-| **processing-service** | 8082 | HTTP: `POST /api/v1/findings/ingest`, `GET /api/v1/groups`. Kafka: consumer топика ingest (см. §3) | Нет внешних HTTP; только PostgreSQL | PostgreSQL: `core.*`. Kafka: **producer** в топик result |
+| **processing-service** | 8082 | HTTP: `POST /api/v1/findings/ingest`, `GET /api/v1/groups`, `GET /api/v1/report/vulnerabilities?limit=…` (отчёт по уязвимостям с группировкой). Kafka: consumer топика ingest (см. §3) | Нет внешних HTTP; только PostgreSQL | PostgreSQL: `core.*`. Kafka: **producer** в топик result |
 | **api-service** | 8080 | HTTP: `POST /api/v1/scans/semgrep`, `GET /health` | HTTP: `semgrep-service` (`/api/v1/scan`), `processing-service` **или** Kafka (см. §3), `jira-integration-service` (`/api/v1/tickets`) | Нигде в БД не пишет. Ответ клиенту: JSON «паспорт» (`findings`, `processing`, `groups`, `tickets`) |
 | **semgrep-service** | 8085 | HTTP: `POST /api/v1/scan` | Запуск Semgrep по файлам по `target_path` **внутри контейнера** | Не использует БД; возвращает JSON с находками |
 | **jira-integration-service** | 8083 | HTTP: `POST /api/v1/tickets`, `GET /health` | HTTP: Jira REST `POST /rest/api/2/issue` на `APP_JIRA_BASE_URL` | PostgreSQL: `integration.ticket_links`. Ответ: ключ/URL задачи |

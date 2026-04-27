@@ -37,8 +37,9 @@ sudo nginx -t && sudo systemctl reload nginx
 |---------------|--------|----------------|
 | `/api/v1/scans`, `/health`, `/openapi.yaml`, `/swagger` | api-service | 8080 |
 | `/api/v1/sync` | reference-data-service | 8081 |
-| `/api/v1/findings`, `/api/v1/groups` | processing-service | 8082 |
+| `/api/v1/findings`, `/api/v1/groups`, `/api/v1/report` | processing-service | 8082 |
 | `/api/v1/tickets` | jira-integration-service | 8083 |
+| `/health/reference`, `/health/processing`, `/health/jira`, `/health/semgrep` | агрегированные `/health` для UI | 8081–8085 |
 
 Убедись, что контейнеры с этими портами подняты на той же машине.
 

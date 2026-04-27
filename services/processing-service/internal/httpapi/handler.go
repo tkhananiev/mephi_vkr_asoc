@@ -21,6 +21,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/health", h.handleHealth)
 	mux.HandleFunc("/api/v1/findings/ingest", h.handleIngest)
 	mux.HandleFunc("/api/v1/groups", h.handleGroups)
+	mux.HandleFunc("/api/v1/report/vulnerabilities", h.handleReportVulnerabilities)
 }
 
 func (h *Handler) handleHealth(w http.ResponseWriter, _ *http.Request) {
@@ -66,6 +67,27 @@ func (h *Handler) handleGroups(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, groups)
+}
+
+func (h *Handler) handleReportVulnerabilities(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		return
+	}
+
+	limit := 200
+	if raw := r.URL.Query().Get("limit"); raw != "" {
+		if parsed, err := strconv.Atoi(raw); err == nil && parsed > 0 && parsed <= 500 {
+			limit = parsed
+		}
+	}
+
+	rows, err := h.processingService.ListVulnerabilityReport(r.Context(), limit)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, rows)
 }
 
 func writeJSON(w http.ResponseWriter, status int, payload any) {

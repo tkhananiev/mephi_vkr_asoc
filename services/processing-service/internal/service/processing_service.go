@@ -121,6 +121,10 @@ func (s *ProcessingService) ListGroups(ctx context.Context, limit int) ([]models
 	return s.repo.ListGroups(ctx, limit)
 }
 
+func (s *ProcessingService) ListVulnerabilityReport(ctx context.Context, limit int) ([]models.VulnerabilityReportRow, error) {
+	return s.repo.ListVulnerabilityReport(ctx, limit)
+}
+
 func normalizeIdentifier(item models.FindingDTO) string {
 	if cve := strings.TrimSpace(item.CVE); cve != "" {
 		return cve
