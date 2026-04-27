@@ -193,7 +193,10 @@ spec:
             - name: APP_HTTP_PORT
               value: "8090"
             - name: APP_JIRA_PUBLIC_BASE_URL
-              value: http://jira-mock:8090
+              valueFrom:
+                configMapKeyRef:
+                  name: asoc-public-urls
+                  key: jira-public-base-url
           readinessProbe:
             httpGet:
               path: /health

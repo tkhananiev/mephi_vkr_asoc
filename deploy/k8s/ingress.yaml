@@ -1,0 +1,48 @@
+# Доступ по IP без FQDN: в rules не задаётся host — матчится любой Host, в т.ч. http://<IP>/...
+# Jira mock: префикс /jira срезается rewrite'ом (см. второй Ingress).
+#
+# ingress-nginx: повесь зарезервированный IP на Service типа LoadBalancer контроллера
+# (в панели Selectel / доке кластера). Здесь IP не задаётся — только маршрутизация.
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: asoc-app
+  namespace: asoc
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-body-size: "32m"
+spec:
+  ingressClassName: nginx
+  rules:
+    - http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: asoc-web
+                port:
+                  number: 80
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: asoc-jira
+  namespace: asoc
+  annotations:
+    nginx.ingress.kubernetes.io/use-regex: "true"
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+spec:
+  ingressClassName: nginx
+  rules:
+    - http:
+        paths:
+          - path: /jira(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: jira-mock
+                port:
+                  number: 8090

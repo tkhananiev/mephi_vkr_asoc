@@ -5,10 +5,12 @@ namespace: asoc
 
 resources:
   - namespace.yaml
+  - public-urls.yaml
   - postgres.yaml
   - kafka.yaml
   - workloads.yaml
   - frontend.yaml
+  - ingress.yaml
 
 configMapGenerator:
   - name: asoc-migrations

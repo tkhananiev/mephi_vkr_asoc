@@ -1,0 +1,13 @@
+# Публичный адрес стенда без DNS: один IP (например зарезервированный в Selectel).
+# После смены IP отредактируй и примени: kubectl apply -f deploy/k8s/public-urls.yaml -n asoc
+# Затем перезапусти jira-mock, чтобы подхватил APP_JIRA_PUBLIC_BASE_URL.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: asoc-public-urls
+  namespace: asoc
+data:
+  # Только хост:порт без пути (для документации / будущих патчей)
+  public-origin: "http://77.223.100.196"
+  # База для ссылок в ответах Jira mock (должна совпадать с Ingress path /jira + rewrite)
+  jira-public-base-url: "http://77.223.100.196/jira"
