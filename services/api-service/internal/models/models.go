@@ -1,15 +1,45 @@
 package models
 
 type ScanRequest struct {
-	TargetPath string `json:"target_path"`
-	ScannerName string `json:"scanner_name"`
-	// SemgrepConfig — путь к YAML внутри контейнера или идентификатор набора правил Semgrep (например p/php, auto).
-	// Пусто — значение из APP_SEMGREP_CONFIG.
-	SemgrepConfig string `json:"semgrep_config,omitempty"`
+	TargetPath       string `json:"target_path"`
+	ScannerName      string `json:"scanner_name"`
+	SemgrepConfig    string `json:"semgrep_config,omitempty"`
+	GitRepositoryURL string `json:"git_repository_url,omitempty"`
+	// GitRepositoryRef — ветка или тег после clone (необязательно: ветка по умолчанию у удалённого репозитория).
+	GitRepositoryRef string `json:"git_repository_ref,omitempty"`
+}
+
+// UnifiedScanRequest — тело POST /api/v1/scans (один вход для всех сканеров).
+// Поля цели те же, что у ScanRequest; scanner_id выбирает исполнитель.
+type UnifiedScanRequest struct {
+	ScannerID        string `json:"scanner_id"`
+	TargetPath       string `json:"target_path,omitempty"`
+	ScannerName      string `json:"scanner_name,omitempty"`
+	SemgrepConfig    string `json:"semgrep_config,omitempty"`
+	GitRepositoryURL string `json:"git_repository_url,omitempty"`
+	GitRepositoryRef string `json:"git_repository_ref,omitempty"`
+	// Options — необязательные параметры сканера (Semgrep их пока не читает; зарезервировано под расширения).
+	Options map[string]any `json:"options,omitempty"`
+}
+
+// ToScanRequest копирует поля без scanner_id.
+func (u UnifiedScanRequest) ToScanRequest() ScanRequest {
+	return ScanRequest{
+		TargetPath:       u.TargetPath,
+		ScannerName:      u.ScannerName,
+		SemgrepConfig:    u.SemgrepConfig,
+		GitRepositoryURL: u.GitRepositoryURL,
+		GitRepositoryRef: u.GitRepositoryRef,
+	}
 }
 
 type SemgrepResult struct {
 	Results []SemgrepFinding `json:"results"`
+	Errors  []struct {
+		Message string `json:"message"`
+		Level   string `json:"level"`
+		Type    string `json:"type"`
+	} `json:"errors"`
 }
 
 type SemgrepFinding struct {
@@ -25,9 +55,22 @@ type SemgrepFinding struct {
 	} `json:"extra"`
 }
 
+// GitleaksFinding — элемент JSON-отчёта `gitleaks detect --report-format json`.
+type GitleaksFinding struct {
+	RuleID      string   `json:"RuleID"`
+	Description string   `json:"Description"`
+	File        string   `json:"File"`
+	StartLine   int      `json:"StartLine"`
+	Fingerprint string   `json:"Fingerprint"`
+	Tags        []string `json:"Tags"`
+}
+
+// ProcessingIngestRequest — контракт пакета находок: Semgrep-сценарий, Kafka и POST /api/v1/findings/ingest на api-service.
 type ProcessingIngestRequest struct {
 	ScannerName string                  `json:"scanner_name"`
 	Findings    []ProcessingFindingItem `json:"findings"`
+	// OwnerUserID выставляет api-service для JWT пользователя консоли (authn.console_users.id).
+	OwnerUserID *int64 `json:"owner_user_id,omitempty"`
 }
 
 type ProcessingFindingItem struct {
@@ -76,10 +119,10 @@ type GroupResponse struct {
 }
 
 type PassportResponse struct {
-	ScannerName string               `json:"scanner_name"`
-	ScanTarget  string               `json:"scan_target"`
+	ScannerName string                  `json:"scanner_name"`
+	ScanTarget  string                  `json:"scan_target"`
 	Findings    []ProcessingFindingItem `json:"findings"`
-	Processing  ProcessingResponse   `json:"processing"`
-	Groups      []GroupResponse      `json:"groups"`
-	Tickets     []TicketResponse     `json:"tickets"`
+	Processing  ProcessingResponse      `json:"processing"`
+	Groups      []GroupResponse         `json:"groups"`
+	Tickets     []TicketResponse        `json:"tickets"`
 }

@@ -2,24 +2,33 @@ package httpapi
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 	"strings"
 
 	"mephi_vkr_asoc/services/semgrep-service/internal/runner"
+	"mephi_vkr_asoc/services/semgrep-service/internal/workspace"
 )
 
 type Handler struct {
 	runner                *runner.Runner
 	defaultScanTargetPath string
+	gitWorkspaceRoot      string
 }
 
-func New(r *runner.Runner, defaultScanTargetPath string) *Handler {
-	return &Handler{runner: r, defaultScanTargetPath: strings.TrimSpace(defaultScanTargetPath)}
+func New(r *runner.Runner, defaultScanTargetPath, gitWorkspaceRoot string) *Handler {
+	return &Handler{
+		runner:                r,
+		defaultScanTargetPath: strings.TrimSpace(defaultScanTargetPath),
+		gitWorkspaceRoot:      strings.TrimSpace(gitWorkspaceRoot),
+	}
 }
 
 type scanRequest struct {
-	TargetPath    string `json:"target_path"`
-	SemgrepConfig string `json:"semgrep_config,omitempty"`
+	TargetPath       string `json:"target_path"`
+	SemgrepConfig    string `json:"semgrep_config,omitempty"`
+	GitRepositoryURL string `json:"git_repository_url,omitempty"`
+	GitRepositoryRef string `json:"git_repository_ref,omitempty"`
 }
 
 func (h *Handler) Register(mux *http.ServeMux) {
@@ -42,15 +51,35 @@ func (h *Handler) handleScan(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json body"})
 		return
 	}
-	if strings.TrimSpace(req.TargetPath) == "" {
-		req.TargetPath = h.defaultScanTargetPath
+
+	gitURL := strings.TrimSpace(req.GitRepositoryURL)
+	var cleanup func()
+
+	targetPath := strings.TrimSpace(req.TargetPath)
+
+	if gitURL != "" {
+		workRoot := h.gitWorkspaceRoot
+		subdir := strings.TrimSpace(targetPath)
+		sd, clr, err := workspace.PrepareGitWorkspace(r.Context(), workRoot, gitURL, req.GitRepositoryRef, subdir)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		cleanup = clr
+		defer cleanup()
+		targetPath = sd
+		log.Printf("semgrep-service: cloned %s → scan dir %s", gitURL, sd)
+	} else {
+		if targetPath == "" {
+			targetPath = h.defaultScanTargetPath
+		}
 	}
-	if req.TargetPath == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "target_path required (or set APP_DEFAULT_SCAN_TARGET_PATH)"})
+	if targetPath == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "target_path required (or set APP_DEFAULT_SCAN_TARGET_PATH) unless git_repository_url is set"})
 		return
 	}
 
-	payload, err := h.runner.Run(r.Context(), req.TargetPath, req.SemgrepConfig)
+	payload, err := h.runner.Run(r.Context(), targetPath, req.SemgrepConfig)
 	if err != nil {
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
 		return

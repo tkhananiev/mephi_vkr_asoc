@@ -15,7 +15,7 @@ type App struct {
 
 func New(cfg config.Config) *App {
 	r := runner.New(cfg.SemgrepBinary, cfg.SemgrepConfig)
-	h := httpapi.New(r, cfg.DefaultScanTargetPath)
+	h := httpapi.New(r, cfg.DefaultScanTargetPath, cfg.GitWorkspaceRoot)
 
 	mux := http.NewServeMux()
 	h.Register(mux)

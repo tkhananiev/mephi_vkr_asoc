@@ -6,9 +6,22 @@
 
 ## 1. Синхронизация со справочниками
 
+Инкрементально по RSS (быстро):
+
 ```bash
 curl -X POST "http://localhost:8081/api/v1/sync/bdu"
-curl --max-time 0 -X POST "http://localhost:8081/api/v1/sync/nvd"
+```
+
+Полный импорт БДУ из `vulxml.zip` + `vullist.xlsx` (долго; по умолчанию скачивание с сайта ФСТЭК, либо локальные пути через `APP_BDU_VULXML_ZIP_PATH` / `APP_BDU_VULLIST_XLSX_PATH`, см. `demo/bdu/README.md` и `docs/ENVIRONMENT.md`):
+
+```bash
+curl --max-time 0 -X POST "http://localhost:8081/api/v1/sync/bdu/bulk"
+```
+
+NVD (пример — одна CVE; полный синк без `cve_id`):
+
+```bash
+curl --max-time 0 -X POST "http://localhost:8081/api/v1/sync/nvd?cve_id=CVE-2021-44228"
 ```
 
 ### Схемы и таблицы (reference-data → PostgreSQL)
@@ -64,7 +77,7 @@ WHERE alias_type = 'CVE';
 `api-service` — порт **8080**. Перед первым прогоном с дефолтной целью: `./demo/scan-targets/clone-webgoat.sh`.
 
 ```bash
-curl -X POST "http://localhost:8080/api/v1/scans/semgrep" \
+curl -X POST "http://localhost:8080/api/v1/scans" \
   -H "Content-Type: application/json" \
-  -d '{"scanner_name":"semgrep"}'
+  -d '{"scanner_id":"semgrep","scanner_name":"semgrep"}'
 ```

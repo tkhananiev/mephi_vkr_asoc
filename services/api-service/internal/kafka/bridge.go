@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"time"
 
-	kafkago "github.com/segmentio/kafka-go"
 	"github.com/google/uuid"
+	kafkago "github.com/segmentio/kafka-go"
 
 	"mephi_vkr_asoc/services/api-service/internal/models"
 )

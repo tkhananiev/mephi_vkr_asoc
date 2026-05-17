@@ -1,0 +1,52 @@
+Access: kubectl -n asoc port-forward svc/api-service 18080:8080
+
+==============================================
+c=50 -t8 -d15s --latency http://127.0.0.1:18080/health
+==============================================
+Running 15s test @ http://127.0.0.1:18080/health
+  8 threads and 50 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   107.27ms   36.05ms 505.85ms   97.73%
+    Req/Sec    58.42      7.76    90.00     88.61%
+  Latency Distribution
+     50%  101.65ms
+     75%  103.80ms
+     90%  107.26ms
+     99%  310.96ms
+  6879 requests in 15.10s, 833.00KB read
+Requests/sec:    455.52
+Transfer/sec:     55.16KB
+
+==============================================
+c=200 -t8 -d15s --latency http://127.0.0.1:18080/health
+==============================================
+Running 15s test @ http://127.0.0.1:18080/health
+  8 threads and 200 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   149.82ms   80.72ms 710.72ms   92.80%
+    Req/Sec   182.30     67.26   272.00     62.80%
+  Latency Distribution
+     50%  112.85ms
+     75%  180.32ms
+     90%  215.79ms
+     99%  544.72ms
+  20899 requests in 15.09s, 2.47MB read
+Requests/sec:   1384.97
+Transfer/sec:    167.71KB
+
+==============================================
+c=400 -t8 -d15s --latency http://127.0.0.1:18080/health
+==============================================
+Running 15s test @ http://127.0.0.1:18080/health
+  8 threads and 400 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   198.40ms  179.44ms   1.27s    94.18%
+    Req/Sec   319.97    110.72   505.00     70.51%
+  Latency Distribution
+     50%  159.87ms
+     75%  192.18ms
+     90%  245.49ms
+     99%    1.21s 
+  35438 requests in 15.05s, 4.19MB read
+Requests/sec:   2355.43
+Transfer/sec:    285.23KB

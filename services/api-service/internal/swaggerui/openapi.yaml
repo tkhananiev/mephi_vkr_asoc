@@ -2,15 +2,96 @@ openapi: 3.0.3
 info:
   title: ASOC Public API (api-service)
   description: |
-    Единственная публичная HTTP-точка входа для клиентов: один вызов запускает цепочку
-    Semgrep → обработка находок → группы → тикеты и возвращает сводный «паспорт».
-    Остальные сервисы (reference-data, processing, jira-integration, semgrep) вызываются
-    из контура и не описываются отдельным OpenAPI.
+    **api-service.** `POST /api/v1/scans` — единый вход: в теле задаётся **`scanner_id`** (`semgrep`, `gitleaks`, …), далее тот же сценарий (сканирование, ingest находок, группы, тикеты).
+    `POST /api/v1/scans/semgrep` оставлен для совместимости (тело как у прежнего Semgrep — без поля `scanner_id`).
+    **`POST /api/v1/findings/ingest`** — приём **уже нормализованных** находок в формате ниже (CI, сторонний сканер); поле `owner_user_id` в теле **не используется**, владелец берётся только из JWT пользователя консоли при наличии. С внешнего контура авторизуйте запрос тем же **`X-API-Key` / Bearer API-ключа** или JWT (см. `APP_AUTH_API_KEY`).
+    `GET /api/v1/integrations` — публичный каталог сканеров (без секретов): метаданные, флаг доступности для консоли.
+    Способ передачи находок и настройки среды — в `docs/ENVIRONMENT.md` и `docs/ARCHITECTURE.md`.
   version: "1.0"
 servers:
+  - url: https://atomic-asoc.ru
+    description: Стенд (через Ingress / asoc-web)
   - url: http://localhost:8080
-    description: Локально (docker-compose)
+    description: Локально (docker-compose), прямой порт api-service
 paths:
+  /api/v1/integrations:
+    get:
+      summary: Каталог интеграций (сканеров)
+      operationId: listIntegrations
+      responses:
+        "200":
+          description: Список инструментов
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IntegrationsListResponse"
+        "405":
+          description: Метод не разрешён
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+  /api/v1/admin/integrations:
+    get:
+      summary: Каталог интеграций для Atomic-admin
+      operationId: adminListIntegrations
+      responses:
+        "200":
+          description: Встроенные и дополнительные сканеры
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminIntegrationsCatalogDetail"
+        "403":
+          description: Нужен JWT роли admin
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        "405":
+          description: Метод не разрешён
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+    put:
+      summary: Замена «дополнительных» сканеров
+      operationId: adminReplaceIntegrations
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminIntegrationsReplaceBody"
+      responses:
+        "200":
+          description: Применено
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+        "400":
+          description: Ошибка валидации
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        "403":
+          description: Нужен JWT роли admin
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        "405":
+          description: Метод не разрешён
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
   /health:
     get:
       summary: Проверка живости
@@ -22,10 +103,74 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthOk"
+  /api/v1/findings/ingest:
+    post:
+      summary: Ingest находок произвольного сканера (нормализованный JSON)
+      description: >
+        Отправка пакета в тот же контракт, что internal `processing-service`; маршрутизация через api-service (Kafka или HTTP по ENV).
+        Пустой массив `findings` допустим — создаётся run без строк.
+      operationId: ingestFindingsPublic
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProcessingIngestRequestPublic"
+      responses:
+        "202":
+          description: Результат прогона обработки
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProcessingSummary"
+        "400":
+          description: Неверное тело
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        "401":
+          description: Нет API-ключа / JWT для /api/*
+        "502":
+          description: Ошибка Kafka / processing-service
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+  /api/v1/scans:
+    post:
+      summary: Полный сценарий сканирования (dispatch по scanner_id)
+      operationId: scanUnified
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UnifiedScanRequest"
+      responses:
+        "202":
+          description: Паспорт сценария
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PassportResponse"
+        "400":
+          description: Неверное тело (в т.ч. неизвестный scanner_id или пустая цель)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        "502":
+          description: Ошибка downstream
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
   /api/v1/scans/semgrep:
     post:
-      summary: Полный сценарий сканирования (Semgrep + ingest + группы + тикеты)
-      operationId: scanSemgrep
+      deprecated: true
+      summary: Полный сценарий сканирования Semgrep (устарело — используйте POST /api/v1/scans и scanner_id)
+      operationId: scanSemgrepLegacy
       requestBody:
         required: true
         content:
@@ -53,7 +198,90 @@ paths:
                 $ref: "#/components/schemas/ErrorBody"
 components:
   schemas:
-    HealthOk:
+    IntegrationsListResponse:
+      type: object
+      properties:
+        integrations:
+          type: array
+          items:
+            $ref: "#/components/schemas/IntegrationCatalogItem"
+    AdminIntegrationsCatalogDetail:
+      type: object
+      properties:
+        overlay_persistent:
+          type: boolean
+          description: true если задан APP_INTEGRATIONS_OVERLAY_PATH (данные сохраняются между рестартами)
+        entries:
+          type: array
+          items:
+            $ref: "#/components/schemas/AdminCatalogEntry"
+    AdminCatalogEntry:
+      type: object
+      properties:
+        source:
+          type: string
+          enum: [builtin, additional]
+        integration:
+          $ref: "#/components/schemas/IntegrationCatalogItem"
+    AdminIntegrationsReplaceBody:
+      type: object
+      required: [additional]
+      properties:
+        additional:
+          type: array
+          items:
+            $ref: "#/components/schemas/IntegrationCatalogItem"
+    IntegrationCatalogItem:
+      type: object
+      properties:
+        id:
+          type: string
+        kind:
+          type: string
+          description: SAST, SCA, DAST и т.д.
+        title:
+          type: string
+        summary:
+          type: string
+        phase:
+          type: string
+          enum: [ready, planned]
+        enabled:
+          type: boolean
+        input_kind:
+          type: string
+          description: filesystem, lockfile, http — вид входных данных сканера
+        scanner_name:
+          type: string
+        api_scan_path:
+          type: string
+        console_path:
+          type: string
+        capabilities:
+          type: array
+          items:
+            type: string
+        note:
+          type: string
+        network_host:
+          type: string
+        network_hostname:
+          type: string
+        network_ip:
+          type: string
+        network_port:
+          type: string
+        scanner_invoke_url:
+          type: string
+          description: Полный URL POST (универсальный раннер /api/v1/run или свой адаптер).
+        runner_command:
+          type: string
+          description: Шаблон shell для generic-scan-runner; плейсхолдеры {target_path}, {git_repository_url} и др.
+        invoke_payload_template:
+          type: string
+          description: Пример или шаблон тела POST для вызова сканера.
+        invoke_hint:
+          type: string
       type: object
       properties:
         status:
@@ -64,16 +292,97 @@ components:
       properties:
         error:
           type: string
+    ProcessingFindingItem:
+      type: object
+      required:
+        - asset_id
+        - identifier
+        - severity
+        - component
+        - version
+        - cve
+        - cwe
+      properties:
+        asset_id:
+          type: string
+        identifier:
+          type: string
+        severity:
+          type: string
+        component:
+          type: string
+        version:
+          type: string
+        cve:
+          type: string
+        cwe:
+          type: string
+        metadata:
+          type: object
+          additionalProperties: true
+        raw_payload:
+          type: object
+          additionalProperties: true
+    ProcessingIngestRequestPublic:
+      type: object
+      required:
+        - scanner_name
+        - findings
+      properties:
+        scanner_name:
+          type: string
+          description: Произвольное имя источника (отображается в processing run).
+          example: my-custom-sast
+        findings:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProcessingFindingItem"
+        owner_user_id:
+          type: integer
+          format: int64
+          deprecated: true
+          description: Игнорируется; владелец задаётся только JWT консоли на api-service.
+    UnifiedScanRequest:
+      allOf:
+        - type: object
+          required:
+            - scanner_id
+          properties:
+            scanner_id:
+              type: string
+              example: semgrep
+              description: Идентификатор исполнителя (`semgrep`, `gitleaks`, …).
+            options:
+              type: object
+              additionalProperties: true
+              description: Необязательные параметры сканера (зарезервировано; Semgrep их пока не использует).
+        - $ref: "#/components/schemas/ScanRequestBodyFields"
     ScanRequest:
+      description: Совместимо с телом UnifiedScanRequest без поля scanner_id (legacy `/scans/semgrep`).
+      allOf:
+        - $ref: "#/components/schemas/ScanRequestBodyFields"
+    ScanRequestBodyFields:
       type: object
       properties:
         scanner_name:
           type: string
           example: semgrep
+        git_repository_url:
+          type: string
+          description: >
+            Если задан, semgrep-service сначала выполняет shallow clone этого remote.
+            Допустимы http(s) и форма git@host:path/repo.git; без приватных секретов в составе платформы
+            поддерживаются в основном публичные репозитории.
+        git_repository_ref:
+          type: string
+          example: main
+          description: Ветка или тег для clone (--branch; при ошибке — clone и git checkout ref).
         target_path:
           type: string
           example: /app/demo/scan-targets/WebGoat/
-          description: Путь внутри контейнера semgrep-service
+          description: >
+            Без git_repository_url — абсолютный каталог исходников внутри контейнера semgrep-service.
+            С git_repository_url — относительный подкаталог внутри клона (пустая строка — корень репозитория).
         semgrep_config:
           type: string
           example: p/java

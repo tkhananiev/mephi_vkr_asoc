@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -99,8 +100,39 @@ func (c *Client) fetchSingleCVE(ctx context.Context, cveID string) ([]models.Sou
 	return c.recordsFromPayload(payload)
 }
 
+const nvdTimeLayout = "2006-01-02T15:04:05.000"
+
+func formatNVDInstant(t time.Time) string {
+	return t.UTC().Format(nvdTimeLayout) + "Z"
+}
+
+func (c *Client) listURL(startIndex int, modStart, modEnd *time.Time) string {
+	v := url.Values{}
+	v.Set("resultsPerPage", fmt.Sprintf("%d", c.pageSize))
+	v.Set("startIndex", fmt.Sprintf("%d", startIndex))
+	if modStart != nil && modEnd != nil {
+		v.Set("lastModStartDate", formatNVDInstant(*modStart))
+		v.Set("lastModEndDate", formatNVDInstant(*modEnd))
+	}
+	return c.baseURL + "?" + v.Encode()
+}
+
 // SyncAllPages загружает все страницы NVD без накопления всего каталога в памяти (onPage вызывается на каждую страницу).
 func (c *Client) SyncAllPages(ctx context.Context, onPage func([]models.SourceRecord) error) error {
+	return c.syncAllPages(ctx, func(startIndex int) string {
+		return c.listURL(startIndex, nil, nil)
+	}, onPage)
+}
+
+// SyncAllPagesModRange — только CVE, у которых lastModified попадает в [modStart, modEnd] (для инкрементального синка).
+func (c *Client) SyncAllPagesModRange(ctx context.Context, modStart, modEnd time.Time, onPage func([]models.SourceRecord) error) error {
+	ms, me := modStart, modEnd
+	return c.syncAllPages(ctx, func(startIndex int) string {
+		return c.listURL(startIndex, &ms, &me)
+	}, onPage)
+}
+
+func (c *Client) syncAllPages(ctx context.Context, urlFor func(int) string, onPage func([]models.SourceRecord) error) error {
 	startIndex := 0
 	pageNum := 0
 
@@ -109,7 +141,7 @@ func (c *Client) SyncAllPages(ctx context.Context, onPage func([]models.SourceRe
 			return err
 		}
 
-		url := fmt.Sprintf("%s?resultsPerPage=%d&startIndex=%d", c.baseURL, c.pageSize, startIndex)
+		url := urlFor(startIndex)
 		payload, err := c.doGET(ctx, url)
 		if err != nil {
 			return err

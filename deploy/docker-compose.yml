@@ -47,6 +47,12 @@ services:
       APP_SYNC_SCHEDULER_ENABLED: "true"
       APP_SYNC_INITIAL_DELAY: 1m
       APP_SYNC_INTERVAL: 24h
+      # Офлайн БДУ: положите vulxml.zip и vullist.xlsx в mephi_vkr_asoc/demo/bdu/; на уровне сервиса (рядом с environment) добавьте:
+      # volumes:
+      #   - ../demo/bdu:/bdu-import:ro
+      # и здесь:
+      # APP_BDU_VULXML_ZIP_PATH: /bdu-import/vulxml.zip
+      # APP_BDU_VULLIST_XLSX_PATH: /bdu-import/vullist.xlsx
     depends_on:
       - postgres
       - kafka
@@ -79,10 +85,27 @@ services:
       APP_HTTP_PORT: "8085"
       APP_SEMGREP_CONFIG: p/java
       APP_DEFAULT_SCAN_TARGET_PATH: /app/demo/scan-targets/WebGoat/
+      APP_SEMGREP_GIT_WORK_ROOT: /var/asoc-semgrep-git
     volumes:
       - ../demo:/app/demo:ro
+      - semgrep_git_workspace:/var/asoc-semgrep-git
     ports:
       - "8085:8085"
+
+  gitleaks-service:
+    build:
+      context: ..
+      dockerfile: services/gitleaks-service/Dockerfile
+    container_name: mephi-vkr-gitleaks-service
+    environment:
+      APP_HTTP_PORT: "8086"
+      APP_DEFAULT_SCAN_TARGET_PATH: /app/demo/scan-targets/WebGoat/
+      APP_GITLEAKS_GIT_WORK_ROOT: /var/asoc-gitleaks-git
+    volumes:
+      - ../demo:/app/demo:ro
+      - gitleaks_git_workspace:/var/asoc-gitleaks-git
+    ports:
+      - "8086:8086"
 
   api-service:
     build:
@@ -94,16 +117,48 @@ services:
       APP_PROCESSING_SERVICE_URL: http://processing-service:8082
       APP_JIRA_SERVICE_URL: http://jira-integration-service:8083
       APP_SEMGREP_SERVICE_URL: http://semgrep-service:8085
+      APP_GITLEAKS_SERVICE_URL: http://gitleaks-service:8086
       APP_KAFKA_BROKERS: kafka:9092
       APP_DEFAULT_SCAN_TARGET_PATH: /app/demo/scan-targets/WebGoat/
       APP_DEFAULT_SEMGREP_CONFIG: p/java
+      # Тот же ключ, что AUTH_JWT_SECRET у auth-service (≥32 символа)
+      APP_JWT_SECRET: ${APP_JWT_SECRET:-stand-jwt-secret-set-via-env-min-32-chars_}
+      APP_POSTGRES_DSN: postgres://asoc:asoc@postgres:5432/asoc?sslmode=disable
+      # Дополнительные сканеры (Atomic-admin) сохраняются в этом файле между рестартами.
+      APP_INTEGRATIONS_OVERLAY_PATH: /var/asoc-overlay/integration-overlay.json
+      # Опасно: только учебный compose; сокет хоста — полный доступ к Docker.
+      APP_DOCKER_OPS_ENABLED: ${APP_DOCKER_OPS_ENABLED:-true}
+      APP_DOCKER_CLI: docker
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - api_integration_overlay:/var/asoc-overlay
     depends_on:
       - kafka
+      - postgres
       - processing-service
       - jira-integration-service
       - semgrep-service
+      - gitleaks-service
     ports:
       - "8080:8080"
+
+  auth-service:
+    build:
+      context: ..
+      dockerfile: services/auth-service/Dockerfile
+    container_name: mephi-vkr-auth-service
+    environment:
+      AUTH_HTTP_PORT: "8091"
+      AUTH_POSTGRES_DSN: postgres://asoc:asoc@postgres:5432/asoc?sslmode=disable
+      AUTH_JWT_SECRET: ${APP_JWT_SECRET:-stand-jwt-secret-set-via-env-min-32-chars_}
+      AUTH_JWT_TTL: 168h
+      # Первый админ только если таблица authn.admins пуста:
+      AUTH_BOOTSTRAP_ADMIN_LOGIN: ${AUTH_BOOTSTRAP_ADMIN_LOGIN:-asoc-admin}
+      AUTH_BOOTSTRAP_ADMIN_PASSWORD: ${AUTH_BOOTSTRAP_ADMIN_PASSWORD:-change-me-admin-9}
+    depends_on:
+      - postgres
+    ports:
+      - "8091:8091"
 
   jira-integration-service:
     image: golang:1.23
@@ -138,3 +193,6 @@ services:
 
 volumes:
   postgres_data:
+  api_integration_overlay:
+  semgrep_git_workspace:
+  gitleaks_git_workspace:

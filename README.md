@@ -20,12 +20,13 @@ MVP для управления уязвимостями: микросервис
 
 - запуск `reference-data-service`
 - ручные REST-операции:
-  - `POST /api/v1/sync/bdu`
+  - `POST /api/v1/sync/bdu` (RSS)
+  - `POST /api/v1/sync/bdu/bulk` (полный каталог ФСТЭК из `vulxml` + `vullist`; **на боевом/студенческом кластере** — том PVC и Job, см. **`deploy/k8s/README.md` § про БДУ**, не локальный compose)
   - `POST /api/v1/sync/nvd`
   - `POST /api/v1/sync/all`
   - `GET /api/v1/sync/runs`
   - `GET /health`
-- загрузка `БДУ ФСТЭК` через RSS feed
+- загрузка `БДУ ФСТЭК` через RSS feed и опционально полный импорт архивов ФСТЭК
 - загрузка ограниченного набора `NVD` через API 2.0
 - сохранение:
   - запусков синхронизации
@@ -44,9 +45,9 @@ MVP для управления уязвимостями: микросервис
 
 ```text
 Клиент (HTTP)
-  -> api-service (POST /api/v1/scans/semgrep; по умолчанию цель WebGoat + p/java через APP_DEFAULT_*)
+  -> api-service (POST /api/v1/scans с `scanner_id: semgrep`; по умолчанию цель WebGoat + p/java через APP_DEFAULT_*; устаревший алиас `POST …/scans/semgrep`)
   -> semgrep-service (POST /api/v1/scan; Semgrep в отдельном контейнере)
-  -> api-service -> Kafka (asoc.findings.ingest) -> processing-service -> Kafka (asoc.findings.ingest.result); корреляция по CVE/CWE через PostgreSQL / catalog.* [или HTTP ingest без Kafka, если APP_KAFKA_BROKERS не задан]
+  -> api-service -> Kafka (asoc.findings.ingest) -> processing-service -> Kafka (asoc.findings.ingest.result); корреляция по CVE/CWE через PostgreSQL / catalog.* [или HTTP ingest без Kafka, если APP_KAFKA_BROKERS не задан; в K8s см. APP_REQUIRE_KAFKA_FOR_FINDINGS_INGEST]
   -> api-service -> GET groups -> POST /api/v1/tickets
   -> jira-integration-service -> jira-mock (на стенде)
 ```
@@ -87,3 +88,4 @@ Semgrep в контейнере **`semgrep-service`** читает **файлы*
 - инструкция: `demo/DEMO.md`
 - curl-сценарий: `demo/curl-demo.sh`
 - примеры HTTP-запросов (коллекция для импорта в средства тестирования API): `demo/http-collection/MEPHI_VKR_ASOC_http_collection.json`
+- нагрузочное тестирование (wrk, HPA, Grafana, отчёт vs Defect Dojo): `loadtest/README.md`, **`loadtest/METHODOLOGY.md`**, шаблон `loadtest/LOAD_TEST_REPORT.md`

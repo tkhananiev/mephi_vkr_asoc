@@ -33,8 +33,6 @@ func EnsureTopics(ctx context.Context, brokers []string, topicNames ...string) e
 		err := ensureTopicsOnce(attemptCtx, brokers, topicNames...)
 		cancel()
 		if err == nil {
-			if attempt > 1 {
-			}
 			return nil
 		}
 		lastErr = err

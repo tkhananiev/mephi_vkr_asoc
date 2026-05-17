@@ -1,8 +1,8 @@
 # Архитектура `mephi_vkr_asoc`
 
-Документ описывает **реализованный в репозитории** контур: микросервисы, обмен по HTTP и Kafka, общую PostgreSQL и типовой сценарий «сканирование → обработка находок → корреляция со справочником → группы → тикет в Jira». Поднять стенд: `deploy/docker-compose.yml`, пошагово — `demo/DEMO.md`. Развёртывание в **Kubernetes**: `deploy/k8s` (Kustomize, Postgres + Kafka + те же сервисы; **api-service** с опциональным ключом `APP_AUTH_API_KEY`, см. `deploy/k8s/README.md`). Исходники диаграмм (Mermaid): `docs/diagrams/` (`system_overview.mmd`, `kafka_app_flow.mmd`, `kafka_read_write.mmd`).
+Документ описывает **реализованный в репозитории** контур: микросервисы, обмен по HTTP и Kafka, общую PostgreSQL и типовой сценарий «сканирование → обработка находок → корреляция со справочником → группы → тикет в Jira». Поднять стенд: `deploy/docker-compose.yml`, пошагово — `demo/DEMO.md`. Развёртывание в **Kubernetes**: `deploy/k8s` (Kustomize, Postgres + Kafka + те же сервисы; **api-service**: `APP_AUTH_API_KEY`, общий **`APP_JWT_SECRET`** с **`auth-service`**, **`APP_POSTGRES_DSN`** для продуктов консоли; см. `deploy/k8s/README.md`). Исходники диаграмм (Mermaid): `docs/diagrams/` (`system_overview.mmd`, `kafka_app_flow.mmd`, `kafka_read_write.mmd`).
 
-**Веб-клиент:** отдельный репозиторий **`mephi_vkr_asoc_front`** (React, TypeScript, Vite) — браузерный UI поверх тех же REST API: дашборд, запуск Semgrep, экран групп, ручной синхрон справочников. HTTP-запросы идут на относительные пути `/api/v1/...`; в dev **прокси Vite** (`vite.config.ts` в том репозитории) перенаправляет их на сервисы на localhost (`8080` — api и сканы, `8081` — sync, `8082`/`8083` — группы и тикеты). Запуск: см. README в `mephi_vkr_asoc_front`. В **`docker-compose`** здесь поднимается только backend; UI — отдельно. Альтернатива — **`curl`/Postman** (`demo/DEMO.md`) и просмотр таблиц в **PostgreSQL**.
+**Веб-клиент:** отдельный каталог **`mephi_vkr_asoc_front`** (React, TypeScript, Vite) — браузерный UI поверх тех же REST API: дашборд, запуск Semgrep, продукты консоли (сохранённые в БД по JWT), группы и отчёт по уязвимостям (проксируются через **api-service** с учётом пользователя). HTTP-запросы на относительные пути `/api/v1/...`; в dev **прокси Vite** (`vite.config.ts`) шлёт `8080` — **api-service** для `/scans`, `/console`, **`/groups`**, **`/report`**, **`/integrations`**, `/admin`; `8081` — sync по-прежнему; **`8082`** — только **`/findings`** (ингест напрямую в `processing` при необходимости отладки). Запуск: README в **`mephi_vkr_asoc_front`**. В **`docker-compose`** здесь поднимается только backend; UI — отдельно. Альтернатива — **`curl`/Postman** (`demo/DEMO.md`) и просмотр таблиц в **PostgreSQL**.
 
 ---
 
@@ -16,7 +16,7 @@
 
 | Сервис | Назначение |
 |--------|------------|
-| **api-service** | Внешний HTTP API для демо-сценария (вызывается из веб-клиента **`mephi_vkr_asoc_front`** и из `curl`/Postman): запуск Semgrep, передача находок в processing (HTTP или Kafka), чтение групп, вызов создания тикета. В БД **не пишет**. |
+| **api-service** | Внешний HTTP API для сценария консоли: запуск Semgrep, передача находок в **processing** (HTTP или Kafka) с необязательным **`owner_user_id`** для пользователя JWT **`role=user`**, **`GET`**/**`POST /api/v1/console/products`** (таблица **`core.console_products`**, нужен **`APP_POSTGRES_DSN`**), **`GET`** групп и отчёта с **проксированием** в `processing-service` и фильтром по владельцу, создание тикета в **Jira**. |
 | **semgrep-service** | HTTP-обёртка над Semgrep: запуск анализа по путям к **файлам внутри своего контейнера** (`POST /api/v1/scan`). |
 | **reference-data-service** | Периодический и ручной синхрон справочников NVD и БДУ ФСТЭК в PostgreSQL (`catalog.*`, `raw.*`, `audit.*`). С **processing** по HTTP **не общается** — только через общие таблицы. |
 | **processing-service** | Ingest находок (HTTP и/или Kafka), нормализация, корреляция по CVE/CWE через SQL к `catalog.*`, группировка, запись в `core.*`. |
@@ -31,11 +31,11 @@
 
 1. **Справочники** наполняются **независимо** от сканирования: `reference-data-service` пишет в БД; `processing-service` только **читает** `catalog.*` при корреляции.
 2. **Корреляция не через HTTP между справочником и обработкой**: оба сервиса смотрят в **одну БД**, чтобы не дублировать REST-контракт справочника и снизить связность.
-3. **Сквозной пользовательский сценарий** всегда идёт через **api-service** (клиент не ходит напрямую в processing/jira, если не отлаживает сервисы по отдельности).
+3. **Сквозной пользовательский сценарий** для браузера — через **nginx** входного UI и **api-service** (группы, отчёт, продукты, скан). **`processing-service`** и **`jira-integration-service`** можно дергать отдельно при отладке.
 
 ### Общая схема контуров
 
-Сводка: два независимых направления — **справочники** (HTTPS → `reference-data-service` → БД) и **сканирование → обработка → тикеты** (через `api-service`; ingest в processing — по Kafka или напрямую по HTTP). Исходник: `diagrams/system_overview.mmd`.
+Сводка: два независимых направления — **справочники** (HTTPS → `reference-data-service` → БД) и **сканирование → обработка → тикеты** (через `api-service`; передача находок в `processing-service` — **предпочтительно Kafka**, иначе **прямой HTTP** `POST /api/v1/findings/ingest`, см. `APP_KAFKA_BROKERS`). Исходник: `diagrams/system_overview.mmd`.
 
 ```mermaid
 flowchart TB
@@ -56,7 +56,7 @@ flowchart TB
     NVD["БДУ / NVD HTTPS"]
   end
 
-  U -->|POST /api/v1/scans/semgrep| API
+  U -->|POST /api/v1/scans| API
   API -->|POST /api/v1/scan| SEM
   SEM -->|JSON находок| API
 
@@ -65,9 +65,9 @@ flowchart TB
   PROC -->|produce result| K
   K -->|consume result| API
   API -.->|иначе POST /api/v1/findings/ingest| PROC
-
   PROC -->|core.* читает catalog.*| DB
-  API -->|GET /api/v1/groups| PROC
+  API -->|proxy GET groups/report + ingest owner| PROC
+  API -->|console_products при APP_POSTGRES_DSN| DB
   API -->|POST /api/v1/tickets| JINT
   JINT -->|REST| MOCK
   JINT -->|ticket_links| DB
@@ -131,18 +131,18 @@ flowchart TB
 
 ## Kafka: зачем и как устроено
 
-При ненулевом **`APP_KAFKA_BROKERS`** (в compose — `kafka:9092`):
+При ненулевом **`APP_KAFKA_BROKERS`** (в compose — `kafka:9092`; в K8s задайте **`APP_REQUIRE_KAFKA_FOR_FINDINGS_INGEST=true`**, чтобы без брокера `api-service` не поднимался):
 
 | Топик | Роль |
 |-------|------|
-| **`asoc.findings.ingest`** | Пакет находок от `api-service`: в теле есть `correlation_id` и JSON ingest. |
+| **`asoc.findings.ingest`** | Пакет находок от `api-service`: есть `correlation_id` и JSON **`ingest`** (в том числе опционально **`owner_user_id`** для консольного пользователя). |
 | **`asoc.findings.ingest.result`** | Ответ `processing-service`: тот же `correlation_id` и результат пайплайна (или ошибка). |
 
-**Паттерн:** request-reply через два топика с одной партицией на топик: `api-service` **публикует** ingest и **ждёт** сообщение в `ingest.result` с тем же `correlation_id`; `processing-service` **потребляет** ingest (consumer group `processing-findings-ingest`), выполняет тот же код, что и HTTP `POST /api/v1/findings/ingest`, и **публикует** результат.
+**Паттерн:** request-reply через два топика с одной партицией на топик: `api-service` **публикует** ingest и **ждёт** сообщение в `ingest.result` с тем же `correlation_id`; `processing-service` **потребляет** ingest (consumer group `processing-findings-ingest`), выполняет ту же бизнес-логику, что и внутри HTTP-обработчика (если он включён), и **публикует** результат.
 
-**Прямой HTTP** `POST /api/v1/findings/ingest` на `processing-service` **сохранён** для ручных тестов и для режима без брокера.
+**Если брокера нет** (локальный запуск): `api-service` шлёт тот же JSON **по HTTP** `POST /api/v1/findings/ingest` на `processing-service` — на `processing-service` тогда нужен включённый HTTP-ingest (по умолчанию **включён**, когда Kafka не задана).
 
-Если **`APP_KAFKA_BROKERS` пустой**, `api-service` отправляет находки **только по HTTP** на `processing-service`.
+**HTTP** `POST /api/v1/findings/ingest` на `processing-service` при работающей Kafka: в compose **по умолчанию отключён**; **включить** для отладки: **`APP_HTTP_FINDINGS_INGEST=true`**.
 
 **Справочники:** `reference-data-service` подключает Kafka в конфиге, но публикация событий синка — **заглушка (noop, лог)**; на обмен находками это не влияет.
 
@@ -152,11 +152,11 @@ flowchart TB
 
 ## Основной сценарий (end-to-end)
 
-1. Клиент вызывает `POST /api/v1/scans/semgrep` на `api-service` (цель и правила можно опустить — подставятся **`APP_DEFAULT_SCAN_TARGET_PATH`** и **`APP_DEFAULT_SEMGREP_CONFIG`** из compose).
+1. Клиент вызывает `POST /api/v1/scans` на `api-service` с телом вроде `{"scanner_id":"semgrep", ...}` (цель и правила можно опустить — подставятся **`APP_DEFAULT_SCAN_TARGET_PATH`** и **`APP_DEFAULT_SEMGREP_CONFIG`** из compose). Устаревший вариант без `scanner_id`: `POST /api/v1/scans/semgrep` с прежним телом.
 2. `api-service` вызывает `POST /api/v1/scan` на `semgrep-service`, получает JSON находок.
-3. `api-service` передаёт ingest в **`processing-service`**: при Kafka — через топики **`asoc.findings.ingest` → `asoc.findings.ingest.result`**, иначе — **`POST /api/v1/findings/ingest`**.
+3. `api-service` передаёт пакет находок в **`processing-service`**: при Kafka — топики **`asoc.findings.ingest` → `asoc.findings.ingest.result`**, иначе — **`POST /api/v1/findings/ingest`**.
 4. `processing-service` пишет находки и уязвимости, **читает `catalog.*` в PostgreSQL** для сопоставления по CVE/CWE, выполняет группировку.
-5. `api-service` запрашивает `GET /api/v1/groups` у `processing-service`, затем `POST /api/v1/tickets` у `jira-integration-service`.
+5. `api-service` запрашивает группы списком у `processing-service` (**HTTP**, с заголовком владельца, если перед этим ingest шёл для JWT-пользователя), затем `POST /api/v1/tickets` у `jira-integration-service`.
 6. `jira-integration-service` обращается к Jira (на стенде — `jira-mock`), сохраняет связь в `integration.ticket_links`.
 
 Шаги 1–2 и 4–6 — синхронный HTTP; шаг 3 при включённом Kafka — **очередь + ответ в топике** (HTTP-запрос к `api-service` для клиента остаётся блокирующим до результата ingest). Очередь между processing и Jira **не используется**.
@@ -172,7 +172,7 @@ Semgrep установлен в образе **`semgrep-service`**. Путь к 
 ## Синхронизация справочников
 
 - По расписанию (по умолчанию раз в **24h**, первый запуск с задержкой **1m**): `APP_SYNC_SCHEDULER_ENABLED`, `APP_SYNC_INITIAL_DELAY`, `APP_SYNC_INTERVAL`.
-- Ручной запуск через REST `reference-data-service` (`/api/v1/sync/...`).
+- Ручной запуск через REST `reference-data-service` (`/api/v1/sync/...`, в т.ч. полный импорт ФСТЭК `POST …/sync/bdu/bulk` из `vulxml.zip` + `vullist.xlsx` при настроенных URL или локальных путях).
 - После успешного синка вызывается noop-публикация в Kafka (место под будущие события).
 
 ---

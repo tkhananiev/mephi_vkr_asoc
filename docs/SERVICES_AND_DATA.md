@@ -8,14 +8,14 @@
 
 | Сервис | Порт | Вход (кто дергает) | Исходящие вызовы | Куда пишет результат |
 |--------|------|-------------------|------------------|----------------------|
-| **reference-data-service** | 8081 | HTTP: `POST /api/v1/sync/*`, `GET /api/v1/sync/runs`, планировщик синка (если включён) | HTTPS: фид БДУ ФСТЭК (`APP_BDU_FEED_URL`), NVD API 2.0 (`APP_NVD_API_BASE_URL`) | PostgreSQL: `audit.*`, `raw.*`, `catalog.*`. Kafka: **нет** (noop-publisher, только лог) |
-| **processing-service** | 8082 | HTTP: `POST /api/v1/findings/ingest`, `GET /api/v1/groups`, `GET /api/v1/report/vulnerabilities?limit=…` (отчёт по уязвимостям с группировкой). Kafka: consumer топика ingest (см. §3) | Нет внешних HTTP; только PostgreSQL | PostgreSQL: `core.*`. Kafka: **producer** в топик result |
-| **api-service** | 8080 | HTTP: `POST /api/v1/scans/semgrep`, `GET /health` | HTTP: `semgrep-service` (`/api/v1/scan`), `processing-service` **или** Kafka (см. §3), `jira-integration-service` (`/api/v1/tickets`) | Нигде в БД не пишет. Ответ клиенту: JSON «паспорт» (`findings`, `processing`, `groups`, `tickets`) |
+| **reference-data-service** | 8081 | HTTP: `POST /api/v1/sync/*` (в т.ч. `…/bdu`, `…/bdu/bulk`, `…/nvd`), `GET /api/v1/sync/runs`, планировщик синка (если включён) | HTTPS: RSS БДУ (`APP_BDU_FEED_URL`), при bulk — `vulxml.zip` / `vullist.xlsx` по URL или **локальные файлы** (`APP_BDU_VULXML_ZIP_PATH`, `APP_BDU_VULLIST_XLSX_PATH`); NVD API 2.0 (`APP_NVD_API_BASE_URL`) | PostgreSQL: `audit.*`, `raw.*`, `catalog.*`. Kafka: **нет** (noop-publisher, только лог) |
+| **processing-service** | 8082 | HTTP: `GET /api/v1/groups`, `GET /api/v1/report/vulnerabilities?limit=…` (для браузера **через** `api-service`, см. ниже). Опционально: `POST /api/v1/findings/ingest` при **`APP_HTTP_FINDINGS_INGEST=true`** | Только **PostgreSQL** и **Kafka** (consumer ingest, producer result); внешних HTTPS-источников нет | PostgreSQL: `core.*`. Kafka: **producer** в топик result |
+| **api-service** | 8080 | HTTP: **`POST /api/v1/scans`** (`scanner_id`, цель как у Semgrep); **`POST /api/v1/scans/semgrep`** — устаревший алиас; **`GET`**/**`POST /api/v1/console/products`**; **`GET /api/v1/groups`** и **`GET /api/v1/report/vulnerabilities`** (прокси в `processing-service` с учётом JWT пользователя); `GET /health` | HTTP: `semgrep-service`; **передача находок** — **Kafka** (если задан `APP_KAFKA_BROKERS`) **или** **HTTP POST** ingest на `processing-service`; после ingest **`GET`** групп напрямую к `processing` с внутренним заголовком владельца; `jira-integration-service` | PostgreSQL при **`APP_POSTGRES_DSN`**: **`core.console_products`**. Иначе в БД не пишет. Ответ клиенту: JSON «паспорт» (`findings`, `processing`, `groups`, `tickets`) и CRUD продуктов консоли |
 | **semgrep-service** | 8085 | HTTP: `POST /api/v1/scan` | Запуск Semgrep по файлам по `target_path` **внутри контейнера** | Не использует БД; возвращает JSON с находками |
 | **jira-integration-service** | 8083 | HTTP: `POST /api/v1/tickets`, `GET /health` | HTTP: Jira REST `POST /rest/api/2/issue` на `APP_JIRA_BASE_URL` | PostgreSQL: `integration.ticket_links`. Ответ: ключ/URL задачи |
 | **jira-mock** | 8090 | HTTP: имитация Jira (`/rest/api/2/issue`) | Нет | Только счётчик в памяти; БД не трогает |
 
-**Типовой сценарий:** клиент → `api-service` → Semgrep → (Kafka или HTTP) → `processing-service` → БД → `api-service` читает группы → `jira-integration-service` → `jira-mock` + запись `integration.ticket_links`.
+**Типовой сценарий:** клиент → `api-service` → Semgrep → **Kafka или HTTP** (пакет находок, при JWT пользователя — с `owner_user_id`) → `processing-service` → БД → `api-service` **проксирует** группы и отчёт (фильтр по владельцу) → `jira-integration-service` → Jira/мок + `integration.ticket_links`; продукты консоли — **`GET`**/**`POST /api/v1/console/products`** на `api-service` → **`core.console_products`**.
 
 ---
 
@@ -64,12 +64,13 @@
 | `findings` | Сырая находка сканера (run, идентификаторы, severity, component, version, `payload_json`). |
 | `vulnerabilities` | Нормализованная уязвимость; `correlation_status`; FK `reference_record_id` → `catalog.reference_records`. Дедуп по сигнатуре `(cve_id, product, version, cwe)` (уникальный индекс с `COALESCE`). |
 | `finding_vulnerabilities` | M:N находка ↔ уязвимость. |
-| `vulnerability_groups` | Агрегат по `group_key` (уникален), `grouping_rule`, `severity_max`, `assets_count`. |
+| `vulnerability_groups` | Агрегат по `group_key` (уникален в таблице; для пользовательских прогонов ключ получает префикс **`u:<console_user_id>:`**). |
 | `group_vulnerabilities` | M:N группа ↔ уязвимость. |
+| **`console_products`** | Продукты консоли: `owner_user_id` → `authn.console_users`, поля SCM и `scan_target_path`. Миграция **`014`**. |
 
 | Кто пишет | Кто читает |
 |-----------|------------|
-| **Пишет:** только `processing-service` (полный цикл `ProcessFindings`). | **Читает:** `processing-service` — `GET /api/v1/groups` (`vulnerability_groups`). **Читает:** `jira-integration-service` **не читает** таблицы `core` напрямую; сведения о группе приходят в теле запроса от `api-service`. Вручную/SQL — любой клиент БД. |
+| **Пишет:** `processing-service` (полный цикл `ProcessFindings` во все таблицы `core` кроме `console_products`). **`api-service`** — только **`console_products`**. | **Читает:** `processing-service` — `GET /api/v1/groups`, выборки отчёта по уязвимостям. UI обращается к группам/отчёту через **`api-service`** (прокси в `processing-service` и фильтр по владельцу JWT **`role=user`**). **`api-service`** читает **`console_products`**. **`jira-integration-service`** таблицы `core` напрямую не читает. Вручную/SQL — любой клиент БД. |
 
 ### 2.5. `integration` — связь с Jira
 
@@ -91,13 +92,13 @@
 
 | Топик | Назначение |
 |-------|------------|
-| `asoc.findings.ingest` | Пакет находок: JSON `{"correlation_id","ingest":{scanner_name, findings[]}}`. |
+| `asoc.findings.ingest` | Пакет находок: JSON `{"correlation_id","ingest":{scanner_name, findings[], "owner_user_id":…}}`; **`owner_user_id`** опционален (консольный пользователь JWT `role=user`, выставляет `api-service`). |
 | `asoc.findings.ingest.result` | Результат: `{"correlation_id","processing":{...}}` или `"error"`. |
 
 | Участник | Роль |
 |----------|------|
-| **api-service** | При ненулевом `APP_KAFKA_BROKERS`: **producer** ingest, **consumer** result (ожидание ответа с тем же `correlation_id`). При пустом брокере — прямой HTTP `POST` на `processing-service`. |
-| **processing-service** | При ненулевом `APP_KAFKA_BROKERS`: **consumer** ingest (group `processing-findings-ingest`), **producer** result. HTTP ingest обрабатывается параллельно тем же `ProcessFindings`. |
+| **api-service** | С Kafka: **producer** ingest, **consumer** result. Без брокера: **HTTP POST** на `processing` ingest. Опция **`APP_REQUIRE_KAFKA_FOR_FINDINGS_INGEST=true`** — не стартовать без брокера. |
+| **processing-service** | С Kafka: **consumer** ingest, **producer** result. HTTP ingest — см. **`APP_HTTP_FINDINGS_INGEST`**. |
 | **reference-data-service** | Подключается к брокеру в конфиге, но публикация событий **заглушена** (noop). |
 
 Создание топиков: `EnsureTopics` в `api-service` и `processing-service` при старте (1 партиция, RF=1).

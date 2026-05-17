@@ -4,22 +4,31 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"mephi_vkr_asoc/services/processing-service/internal/models"
 	"mephi_vkr_asoc/services/processing-service/internal/service"
 )
 
 type Handler struct {
-	processingService *service.ProcessingService
+	processingService         *service.ProcessingService
+	httpFindingsIngestEnabled bool
 }
 
-func New(processingService *service.ProcessingService) *Handler {
-	return &Handler{processingService: processingService}
+const headerConsoleUserID = "X-ASOC-Console-User-ID"
+
+func New(processingService *service.ProcessingService, httpFindingsIngestEnabled bool) *Handler {
+	return &Handler{
+		processingService:        processingService,
+		httpFindingsIngestEnabled: httpFindingsIngestEnabled,
+	}
 }
 
 func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/health", h.handleHealth)
-	mux.HandleFunc("/api/v1/findings/ingest", h.handleIngest)
+	if h.httpFindingsIngestEnabled {
+		mux.HandleFunc("/api/v1/findings/ingest", h.handleIngest)
+	}
 	mux.HandleFunc("/api/v1/groups", h.handleGroups)
 	mux.HandleFunc("/api/v1/report/vulnerabilities", h.handleReportVulnerabilities)
 }
@@ -39,6 +48,7 @@ func (h *Handler) handleIngest(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json body"})
 		return
 	}
+	mergeIngestOwnerFromHeader(r, &request)
 
 	result, err := h.processingService.ProcessFindings(r.Context(), request)
 	if err != nil {
@@ -61,7 +71,7 @@ func (h *Handler) handleGroups(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	groups, err := h.processingService.ListGroups(r.Context(), limit)
+	groups, err := h.processingService.ListGroups(r.Context(), limit, parseOwnerHeader(r))
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
@@ -82,7 +92,7 @@ func (h *Handler) handleReportVulnerabilities(w http.ResponseWriter, r *http.Req
 		}
 	}
 
-	rows, err := h.processingService.ListVulnerabilityReport(r.Context(), limit)
+	rows, err := h.processingService.ListVulnerabilityReport(r.Context(), limit, parseOwnerHeader(r))
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
@@ -94,4 +104,23 @@ func writeJSON(w http.ResponseWriter, status int, payload any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(payload)
+}
+
+func mergeIngestOwnerFromHeader(r *http.Request, req *models.IngestRequest) {
+	if req.OwnerUserID != nil && *req.OwnerUserID > 0 {
+		return
+	}
+	req.OwnerUserID = parseOwnerHeader(r)
+}
+
+func parseOwnerHeader(r *http.Request) *int64 {
+	h := strings.TrimSpace(r.Header.Get(headerConsoleUserID))
+	if h == "" {
+		return nil
+	}
+	id, err := strconv.ParseInt(h, 10, 64)
+	if err != nil || id <= 0 {
+		return nil
+	}
+	return &id
 }

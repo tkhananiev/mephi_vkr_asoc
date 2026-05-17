@@ -5,7 +5,9 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -28,6 +30,19 @@ func (r *Repository) StartSyncRun(ctx context.Context, sourceCode string) (int64
 		sourceCode,
 	).Scan(&id)
 	return id, err
+}
+
+// UpdateSyncRunProgress — промежуточное обновление во время долгих синков (bulk БДУ), чтобы в БД был виден прогресс.
+func (r *Repository) UpdateSyncRunProgress(ctx context.Context, runID int64, result models.SyncResult) error {
+	_, err := r.pool.Exec(ctx, `
+		UPDATE audit.reference_sync_runs
+		SET items_discovered = $2,
+		    items_processed = $3,
+		    items_inserted = $4,
+		    items_updated = $5
+		WHERE id = $1 AND status = 'running'
+	`, runID, result.ItemsDiscovered, result.ItemsProcessed, result.ItemsInserted, result.ItemsUpdated)
+	return err
 }
 
 func (r *Repository) FinishSyncRun(ctx context.Context, runID int64, status string, result models.SyncResult, errMsg *string) error {
@@ -124,6 +139,57 @@ func (r *Repository) UpsertReferenceRecord(ctx context.Context, record models.Re
 	return inserted, nil
 }
 
+// InsertReferenceRecordIfAbsent вставляет запись каталога и алиасы только если ещё нет строки с тем же (source_code, external_id).
+func (r *Repository) InsertReferenceRecordIfAbsent(ctx context.Context, record models.ReferenceRecord) (inserted bool, err error) {
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return false, err
+	}
+	defer tx.Rollback(ctx)
+
+	var recordID int64
+	qErr := tx.QueryRow(ctx, `
+		INSERT INTO catalog.reference_records (
+			source_code, external_id, title, description, severity,
+			published_at, modified_at, source_url, status, metadata_json
+		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+		ON CONFLICT (source_code, external_id) DO NOTHING
+		RETURNING id
+	`,
+		record.SourceCode,
+		record.ExternalID,
+		record.Title,
+		record.Description,
+		record.Severity,
+		record.PublishedAt,
+		record.ModifiedAt,
+		record.SourceURL,
+		record.Status,
+		record.Metadata,
+	).Scan(&recordID)
+	if qErr != nil {
+		if errors.Is(qErr, pgx.ErrNoRows) {
+			return false, nil
+		}
+		return false, qErr
+	}
+
+	for _, alias := range record.Aliases {
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO catalog.reference_aliases (reference_record_id, alias_type, alias_value)
+			VALUES ($1, $2, $3)
+			ON CONFLICT (reference_record_id, alias_type, alias_value) DO NOTHING
+		`, recordID, alias.AliasType, alias.AliasValue); err != nil {
+			return false, err
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
 func (r *Repository) ListSyncRuns(ctx context.Context, limit int) ([]models.SyncRun, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT id, source_code, status, started_at, finished_at,
@@ -158,6 +224,118 @@ func (r *Repository) ListSyncRuns(ctx context.Context, limit int) ([]models.Sync
 	}
 
 	return result, rows.Err()
+}
+
+func (r *Repository) CatalogRecordCounts(ctx context.Context) (map[string]int64, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT source_code, COUNT(*)::bigint
+		FROM catalog.reference_records
+		GROUP BY source_code
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]int64{}
+	for rows.Next() {
+		var code string
+		var n int64
+		if err := rows.Scan(&code, &n); err != nil {
+			return nil, err
+		}
+		out[code] = n
+	}
+	return out, rows.Err()
+}
+
+func (r *Repository) ListRunningSyncRuns(ctx context.Context) ([]models.SyncRun, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT id, source_code, status, started_at, finished_at,
+		       items_discovered, items_processed, items_inserted, items_updated, error_message
+		FROM audit.reference_sync_runs
+		WHERE status = 'running'
+		ORDER BY started_at ASC
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var result []models.SyncRun
+	for rows.Next() {
+		var run models.SyncRun
+		if err := rows.Scan(
+			&run.ID,
+			&run.SourceCode,
+			&run.Status,
+			&run.StartedAt,
+			&run.FinishedAt,
+			&run.ItemsDiscovered,
+			&run.ItemsProcessed,
+			&run.ItemsInserted,
+			&run.ItemsUpdated,
+			&run.ErrorMessage,
+		); err != nil {
+			return nil, err
+		}
+		result = append(result, run)
+	}
+	return result, rows.Err()
+}
+
+func (r *Repository) LastCompletedSyncBySource(ctx context.Context) (map[string]time.Time, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT source_code, MAX(finished_at)
+		FROM audit.reference_sync_runs
+		WHERE status = 'completed' AND finished_at IS NOT NULL
+		GROUP BY source_code
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]time.Time{}
+	for rows.Next() {
+		var code string
+		var fin time.Time
+		if err := rows.Scan(&code, &fin); err != nil {
+			return nil, err
+		}
+		out[code] = fin
+	}
+	return out, rows.Err()
+}
+
+func (r *Repository) GetReferenceSyncCursor(ctx context.Context, sourceCode string) (*models.ReferenceSyncCursor, error) {
+	var cur models.ReferenceSyncCursor
+	err := r.pool.QueryRow(ctx, `
+		SELECT source_code, nvd_last_mod_end, nvd_full_sync_completed
+		FROM audit.reference_sync_cursor
+		WHERE source_code = $1
+	`, sourceCode).Scan(&cur.SourceCode, &cur.NVDLastModEnd, &cur.NVDFullSyncCompleted)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &cur, nil
+}
+
+func (r *Repository) UpsertReferenceSyncCursor(ctx context.Context, cursor models.ReferenceSyncCursor) error {
+	_, err := r.pool.Exec(ctx, `
+		INSERT INTO audit.reference_sync_cursor (source_code, nvd_last_mod_end, nvd_full_sync_completed)
+		VALUES ($1, $2, $3)
+		ON CONFLICT (source_code) DO UPDATE SET
+			nvd_last_mod_end = EXCLUDED.nvd_last_mod_end,
+			nvd_full_sync_completed = EXCLUDED.nvd_full_sync_completed
+	`, cursor.SourceCode, cursor.NVDLastModEnd, cursor.NVDFullSyncCompleted)
+	return err
+}
+
+func (r *Repository) DeleteReferenceSyncCursor(ctx context.Context, sourceCode string) error {
+	_, err := r.pool.Exec(ctx, `DELETE FROM audit.reference_sync_cursor WHERE source_code = $1`, sourceCode)
+	return err
 }
 
 func MustJSON(raw any) []byte {

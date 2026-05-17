@@ -31,6 +31,10 @@ go.work.sum
 .idea/
 .vscode/
 
+# macOS
+.DS_Store
+**/.DS_Store
+
 # Клонируемые цели SAST (не коммитим)
 demo/scan-targets/WebGoat/
 

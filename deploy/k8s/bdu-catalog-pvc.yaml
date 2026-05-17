@@ -1,0 +1,23 @@
+# Том под полный дамп БДУ ФСТЭК для reference-data-service в Kubernetes (смонтирован в /bdu-import).
+# Сценарий целиком: deploy/k8s/README.md § «БДУ: полный дамп только в Kubernetes».
+#
+# После записи дампов запуск импорта: kubectl apply -f deploy/k8s/bdu-bulk-job.yaml
+#
+# Пример копирования с ноутбука в под с PVC (RWX не требуется — под тот же, что монтирует claim):
+#
+#   POD=$(kubectl -n asoc get pods -l app=reference-data-service -o jsonpath='{.items[0].metadata.name}')
+#   kubectl -n asoc cp /путь/к/vullist.xlsx "$POD":/bdu-import/vullist.xlsx
+#   kubectl -n asoc cp /путь/к/vulxml.xml   "$POD":/bdu-import/vulxml.xml
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: bdu-catalog-import
+  namespace: asoc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: fast.ru-7a
+  resources:
+    requests:
+      storage: 5Gi

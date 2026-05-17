@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -39,11 +40,42 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	var bduBulk *bdu.BulkImporter
+	zipViaLocal := strings.TrimSpace(cfg.BDUVulxmlZIPPath) != ""
+	xlsxViaLocal := strings.TrimSpace(cfg.BDUVullistXLSXPath) != ""
+	zipViaURL := strings.TrimSpace(cfg.BDUVulxmlZIPURL) != ""
+	xlsxViaURL := strings.TrimSpace(cfg.BDUVullistXLSXURL) != ""
+	zipOK := zipViaLocal || zipViaURL
+	xlsxOK := xlsxViaLocal || xlsxViaURL
+	// HTTP нужен для URL и как fallback, если локальные пути заданы (например /bdu-import/… в k8s), но файлов на томе ещё нет.
+	needsBulkHTTP := zipViaURL || xlsxViaURL
+
+	if cfg.BDUBulkEnabled && zipOK && xlsxOK {
+		var bulkHTTP *http.Client
+		if needsBulkHTTP {
+			var errHTTP error
+			bulkHTTP, errHTTP = bdu.NewHTTPClient(cfg.BDUInsecure, cfg.BDURootCAFile, 0)
+			if errHTTP != nil {
+				return nil, errHTTP
+			}
+		}
+		bduBulk = bdu.NewBulkImporter(
+			bulkHTTP,
+			cfg.BDUVulxmlZIPURL,
+			cfg.BDUVullistXLSXURL,
+			cfg.BDUBulkBatchSize,
+			cfg.BDUVulxmlZIPPath,
+			cfg.BDUVullistXLSXPath,
+		)
+	}
+
 	syncService := service.NewSyncService(
 		repo,
 		publisher,
 		bduClient,
 		nvd.New(cfg.NVDAPIBaseURL, cfg.NVDAPIKey, cfg.NVDPageSize, cfg.NVDMaxPages, cfg.NVDHTTPRequestTimeout),
+		bduBulk,
 	)
 
 	mux := http.NewServeMux()

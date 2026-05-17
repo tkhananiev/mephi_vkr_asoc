@@ -43,8 +43,11 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 	}
 
 	mux := http.NewServeMux()
-	handler := httpapi.New(processingService)
+	handler := httpapi.New(processingService, cfg.HTTPFindingsIngestEnabled)
 	handler.Register(mux)
+	if !cfg.HTTPFindingsIngestEnabled {
+		log.Printf("processing-service: HTTP POST /api/v1/findings/ingest отключён (приём находок только из Kafka)")
+	}
 
 	server := &http.Server{
 		Addr:    ":" + cfg.HTTPPort,

@@ -22,6 +22,12 @@ type Config struct {
 	SyncInterval          time.Duration
 	SyncSchedulerEnabled  bool
 	SyncInitialDelay      time.Duration
+	BDUBulkEnabled        bool
+	BDUVulxmlZIPURL       string
+	BDUVullistXLSXURL     string
+	BDUVulxmlZIPPath      string // vulxml.zip или распакованный vulxml.xml; file://…; приоритет над BDUVulxmlZIPURL
+	BDUVullistXLSXPath    string
+	BDUBulkBatchSize      int
 }
 
 func Load() Config {
@@ -39,7 +45,13 @@ func Load() Config {
 		NVDHTTPRequestTimeout: getDuration("APP_NVD_HTTP_REQUEST_TIMEOUT", 15*time.Minute),
 		SyncInterval:         getDuration("APP_SYNC_INTERVAL", 24*time.Hour),
 		SyncSchedulerEnabled: getBool("APP_SYNC_SCHEDULER_ENABLED", true),
-		SyncInitialDelay:     getDuration("APP_SYNC_INITIAL_DELAY", time.Minute),
+		SyncInitialDelay:    getDuration("APP_SYNC_INITIAL_DELAY", time.Minute),
+		BDUBulkEnabled:      getBool("APP_BDU_BULK_ENABLED", true),
+		BDUVulxmlZIPURL:     getEnv("APP_BDU_VULXML_ZIP_URL", "https://bdu.fstec.ru/files/documents/vulxml.zip"),
+		BDUVullistXLSXURL:   getEnv("APP_BDU_VULLIST_XLSX_URL", "https://bdu.fstec.ru/files/documents/vullist.xlsx"),
+		BDUVulxmlZIPPath:    getEnv("APP_BDU_VULXML_ZIP_PATH", ""),
+		BDUVullistXLSXPath:   getEnv("APP_BDU_VULLIST_XLSX_PATH", ""),
+		BDUBulkBatchSize:    getInt("APP_BDU_BULK_BATCH_SIZE", 500),
 	}
 }
 

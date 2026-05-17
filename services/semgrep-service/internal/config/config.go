@@ -9,7 +9,9 @@ type Config struct {
 	HTTPPort              string
 	SemgrepBinary         string
 	SemgrepConfig         string
-	DefaultScanTargetPath string // если в POST не передан target_path
+	DefaultScanTargetPath string // если в POST не передан target_path и нет git
+	// Корневой каталог для временных git clone перед сканированием (/tmp может быть маленьким — лучше emptyDir том).
+	GitWorkspaceRoot string
 }
 
 func Load() Config {
@@ -18,6 +20,7 @@ func Load() Config {
 		SemgrepBinary:         getEnv("APP_SEMGREP_BINARY", "semgrep"),
 		SemgrepConfig:         getEnv("APP_SEMGREP_CONFIG", "p/java"),
 		DefaultScanTargetPath: getEnv("APP_DEFAULT_SCAN_TARGET_PATH", "/app/demo/scan-targets/WebGoat/"),
+		GitWorkspaceRoot:      getEnv("APP_SEMGREP_GIT_WORK_ROOT", "/tmp/asoc-semgrep-git-work"),
 	}
 }
 

@@ -8,7 +8,10 @@ resources:
   - public-urls.yaml
   - postgres.yaml
   - kafka.yaml
+  - bdu-catalog-pvc.yaml
+  - api-pod-ops-rbac.yaml
   - workloads.yaml
+  - hpa.yaml
   - frontend.yaml
   - ingress.yaml
 
@@ -22,3 +25,12 @@ configMapGenerator:
       - ../../migrations/003_integration_schema.sql
       - ../../migrations/004_demo_seed.sql
       - ../../migrations/005_demo_cwe_alias.sql
+      - ../../migrations/006_reference_sync_cursor.sql
+      - ../../migrations/007_app_users.sql
+      - ../../migrations/008_authorization_schema.sql
+      - ../../migrations/009_admins_disabled.sql
+      - ../../migrations/010_console_user_display_name.sql
+      - ../../migrations/011_console_user_fio_username.sql
+      - ../../migrations/012_pending_registrations.sql
+      - ../../migrations/013_demo_cwe89_alias.sql
+      - ../../migrations/014_console_products_and_run_owner.sql

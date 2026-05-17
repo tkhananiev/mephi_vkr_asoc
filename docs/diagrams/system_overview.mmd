@@ -19,7 +19,7 @@ flowchart TB
     NVD["БДУ / NVD HTTPS"]
   end
 
-  U -->|POST /api/v1/scans/semgrep| API
+  U -->|POST /api/v1/scans| API
   API -->|POST /api/v1/scan| SEM
   SEM -->|JSON находок| API
 
@@ -30,7 +30,8 @@ flowchart TB
   API -.->|иначе POST /api/v1/findings/ingest| PROC
 
   PROC -->|core.* читает catalog.*| DB
-  API -->|GET /api/v1/groups| PROC
+  API -->|ingest optional owner<br/>proxy groups/report| PROC
+  API -->|console_products| DB
   API -->|POST /api/v1/tickets| JINT
   JINT -->|REST| MOCK
   JINT -->|ticket_links| DB

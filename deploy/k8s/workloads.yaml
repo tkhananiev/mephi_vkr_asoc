@@ -1,5 +1,4 @@
-# Образы собираются из корня репозитория: см. README в этой папке.
-# imagePullPolicy: IfNotPresent — для minikube после local docker build.
+# Образы: cr.selcloud.ru/atomic-asoc/<имя>:latest (Container Registry Selectel), см. Deployments ниже.
 ---
 apiVersion: v1
 kind: Service
@@ -19,6 +18,8 @@ metadata:
   name: reference-data-service
   namespace: asoc
 spec:
+  strategy:
+    type: Recreate
   replicas: 1
   selector:
     matchLabels:
@@ -28,10 +29,12 @@ spec:
       labels:
         app: reference-data-service
     spec:
+      imagePullSecrets:
+        - name: selcloud-registry
       containers:
         - name: app
-          image: asoc/reference-data-service:latest
-          imagePullPolicy: IfNotPresent
+          image: cr.selcloud.ru/atomic-asoc/reference-data:latest
+          imagePullPolicy: Always
           ports:
             - containerPort: 8081
           env:
@@ -56,6 +59,13 @@ spec:
               value: 1m
             - name: APP_SYNC_INTERVAL
               value: 24h
+            # Полный импорт POST /api/v1/sync/bdu/bulk — файлы в образе (/opt/asoc/bdu-default/… см. Dockerfile).
+            - name: APP_BDU_BULK_ENABLED
+              value: "true"
+            - name: APP_BDU_VULXML_ZIP_PATH
+              value: /opt/asoc/bdu-default/vulxml.zip
+            - name: APP_BDU_VULLIST_XLSX_PATH
+              value: /opt/asoc/bdu-default/vullist.xlsx
           readinessProbe:
             httpGet:
               path: /health
@@ -81,6 +91,8 @@ metadata:
   name: processing-service
   namespace: asoc
 spec:
+  strategy:
+    type: Recreate
   replicas: 1
   selector:
     matchLabels:
@@ -90,10 +102,12 @@ spec:
       labels:
         app: processing-service
     spec:
+      imagePullSecrets:
+        - name: selcloud-registry
       containers:
         - name: app
-          image: asoc/processing-service:latest
-          imagePullPolicy: IfNotPresent
+          image: cr.selcloud.ru/atomic-asoc/processing:latest
+          imagePullPolicy: Always
           ports:
             - containerPort: 8082
           env:
@@ -110,6 +124,13 @@ spec:
             httpGet:
               path: /health
               port: 8082
+          resources:
+            requests:
+              cpu: 200m
+              memory: 256Mi
+            limits:
+              cpu: "2"
+              memory: 768Mi
 ---
 apiVersion: v1
 kind: Service
@@ -129,6 +150,8 @@ metadata:
   name: semgrep-service
   namespace: asoc
 spec:
+  strategy:
+    type: Recreate
   replicas: 1
   selector:
     matchLabels:
@@ -138,10 +161,15 @@ spec:
       labels:
         app: semgrep-service
     spec:
+      imagePullSecrets:
+        - name: selcloud-registry
+      volumes:
+        - name: semgrep-git-work
+          emptyDir: {}
       containers:
         - name: app
-          image: asoc/semgrep-service:latest
-          imagePullPolicy: IfNotPresent
+          image: cr.selcloud.ru/atomic-asoc/semgrep:latest
+          imagePullPolicy: Always
           ports:
             - containerPort: 8085
           env:
@@ -151,10 +179,118 @@ spec:
               value: p/java
             - name: APP_DEFAULT_SCAN_TARGET_PATH
               value: /app/demo/scan-targets/WebGoat/
+            - name: APP_SEMGREP_GIT_WORK_ROOT
+              value: /var/asoc-semgrep-git
+          volumeMounts:
+            - name: semgrep-git-work
+              mountPath: /var/asoc-semgrep-git
           readinessProbe:
             httpGet:
               path: /health
               port: 8085
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: gitleaks-service
+  namespace: asoc
+spec:
+  ports:
+    - port: 8086
+      targetPort: 8086
+  selector:
+    app: gitleaks-service
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gitleaks-service
+  namespace: asoc
+spec:
+  strategy:
+    type: Recreate
+  replicas: 1
+  selector:
+    matchLabels:
+      app: gitleaks-service
+  template:
+    metadata:
+      labels:
+        app: gitleaks-service
+    spec:
+      imagePullSecrets:
+        - name: selcloud-registry
+      volumes:
+        - name: gitleaks-git-work
+          emptyDir: {}
+      containers:
+        - name: app
+          image: cr.selcloud.ru/atomic-asoc/gitleaks:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8086
+          env:
+            - name: APP_HTTP_PORT
+              value: "8086"
+            - name: APP_DEFAULT_SCAN_TARGET_PATH
+              value: /app/demo/scan-targets/WebGoat/
+            - name: APP_GITLEAKS_GIT_WORK_ROOT
+              value: /var/asoc-gitleaks-git
+          volumeMounts:
+            - name: gitleaks-git-work
+              mountPath: /var/asoc-gitleaks-git
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8086
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: generic-scan-runner
+  namespace: asoc
+spec:
+  ports:
+    - port: 8087
+      targetPort: 8087
+  selector:
+    app: generic-scan-runner
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: generic-scan-runner
+  namespace: asoc
+spec:
+  strategy:
+    type: Recreate
+  replicas: 1
+  selector:
+    matchLabels:
+      app: generic-scan-runner
+  template:
+    metadata:
+      labels:
+        app: generic-scan-runner
+    spec:
+      imagePullSecrets:
+        - name: selcloud-registry
+      containers:
+        - name: app
+          image: cr.selcloud.ru/atomic-asoc/generic-scan-runner:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8087
+          env:
+            - name: APP_HTTP_PORT
+              value: "8087"
+            # Максимум времени на одну команду shell (совпадает с таймаутом HTTP-клиента api-service к сканеру по умолчанию).
+            - name: APP_EXEC_TIMEOUT_SEC
+              value: "600"
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8087
 ---
 apiVersion: v1
 kind: Service
@@ -174,6 +310,8 @@ metadata:
   name: jira-mock
   namespace: asoc
 spec:
+  strategy:
+    type: Recreate
   replicas: 1
   selector:
     matchLabels:
@@ -183,10 +321,12 @@ spec:
       labels:
         app: jira-mock
     spec:
+      imagePullSecrets:
+        - name: selcloud-registry
       containers:
         - name: app
-          image: asoc/jira-mock:latest
-          imagePullPolicy: IfNotPresent
+          image: cr.selcloud.ru/atomic-asoc/jira-mock:latest
+          imagePullPolicy: Always
           ports:
             - containerPort: 8090
           env:
@@ -220,6 +360,8 @@ metadata:
   name: jira-integration-service
   namespace: asoc
 spec:
+  strategy:
+    type: Recreate
   replicas: 1
   selector:
     matchLabels:
@@ -229,10 +371,12 @@ spec:
       labels:
         app: jira-integration-service
     spec:
+      imagePullSecrets:
+        - name: selcloud-registry
       containers:
         - name: app
-          image: asoc/jira-integration-service:latest
-          imagePullPolicy: IfNotPresent
+          image: cr.selcloud.ru/atomic-asoc/jira-integration:latest
+          imagePullPolicy: Always
           ports:
             - containerPort: 8083
           env:
@@ -255,6 +399,97 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
+  name: auth-service
+  namespace: asoc
+spec:
+  ports:
+    - port: 8091
+      targetPort: 8091
+  selector:
+    app: auth-service
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: auth-service
+  namespace: asoc
+spec:
+  strategy:
+    type: Recreate
+  replicas: 1
+  selector:
+    matchLabels:
+      app: auth-service
+  template:
+    metadata:
+      labels:
+        app: auth-service
+    spec:
+      imagePullSecrets:
+        - name: selcloud-registry
+      initContainers:
+        - name: wait-postgres
+          image: busybox:1.36
+          command: ["sh", "-c", "until nc -z postgres 5432; do echo waiting postgres; sleep 2; done"]
+      containers:
+        - name: app
+          image: cr.selcloud.ru/atomic-asoc/auth:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8091
+          env:
+            - name: AUTH_HTTP_PORT
+              value: "8091"
+            - name: AUTH_POSTGRES_DSN
+              valueFrom:
+                secretKeyRef:
+                  name: asoc-secrets
+                  key: postgres-dsn
+            - name: AUTH_JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: asoc-secrets
+                  key: jwt-secret
+            - name: AUTH_JWT_TTL
+              value: "168h"
+            - name: AUTH_BOOTSTRAP_ADMIN_LOGIN
+              valueFrom:
+                secretKeyRef:
+                  name: asoc-secrets
+                  key: auth-bootstrap-admin-login
+                  optional: true
+            - name: AUTH_BOOTSTRAP_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: asoc-secrets
+                  key: auth-bootstrap-admin-password
+                  optional: true
+            - name: AUTH_SMTP_HOST
+              value: smtp.mail.selcloud.ru
+            - name: AUTH_SMTP_PORT
+              value: "1126"
+            - name: AUTH_SMTP_LOGIN
+              valueFrom:
+                secretKeyRef:
+                  name: asoc-secrets
+                  key: smtp-login
+            - name: AUTH_SMTP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: asoc-secrets
+                  key: smtp-api-key
+            - name: AUTH_SMTP_FROM
+              value: no-reply@atomic-asoc.ru
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8091
+            initialDelaySeconds: 5
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
   name: api-service
   namespace: asoc
 spec:
@@ -270,6 +505,8 @@ metadata:
   name: api-service
   namespace: asoc
 spec:
+  strategy:
+    type: Recreate
   replicas: 1
   selector:
     matchLabels:
@@ -279,14 +516,20 @@ spec:
       labels:
         app: api-service
     spec:
+      serviceAccountName: api-service
+      imagePullSecrets:
+        - name: selcloud-registry
       initContainers:
         - name: wait-kafka
           image: busybox:1.36
           command: ["sh", "-c", "until nc -z kafka 9092; do echo waiting kafka; sleep 2; done"]
+      volumes:
+        - name: integration-overlay
+          emptyDir: {}
       containers:
         - name: app
-          image: asoc/api-service:latest
-          imagePullPolicy: IfNotPresent
+          image: cr.selcloud.ru/atomic-asoc/api:latest
+          imagePullPolicy: Always
           ports:
             - containerPort: 8080
           env:
@@ -298,17 +541,42 @@ spec:
               value: http://jira-integration-service:8083
             - name: APP_SEMGREP_SERVICE_URL
               value: http://semgrep-service:8085
+            - name: APP_GITLEAKS_SERVICE_URL
+              value: http://gitleaks-service:8086
             - name: APP_KAFKA_BROKERS
               value: kafka:9092
+            - name: APP_REQUIRE_KAFKA_FOR_FINDINGS_INGEST
+              value: "true"
             - name: APP_DEFAULT_SCAN_TARGET_PATH
               value: /app/demo/scan-targets/WebGoat/
             - name: APP_DEFAULT_SEMGREP_CONFIG
               value: p/java
+            - name: APP_JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: asoc-secrets
+                  key: jwt-secret
             - name: APP_AUTH_API_KEY
               valueFrom:
                 secretKeyRef:
                   name: asoc-secrets
                   key: api-auth-key
+            - name: APP_POSTGRES_DSN
+              valueFrom:
+                secretKeyRef:
+                  name: asoc-secrets
+                  key: postgres-dsn
+            - name: APP_K8S_OPS_ENABLED
+              value: "true"
+            - name: APP_K8S_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: APP_INTEGRATIONS_OVERLAY_PATH
+              value: /var/asoc-overlay/integration-overlay.json
+          volumeMounts:
+            - name: integration-overlay
+              mountPath: /var/asoc-overlay
           readinessProbe:
             httpGet:
               path: /health
@@ -321,3 +589,10 @@ spec:
               port: 8080
             initialDelaySeconds: 15
             periodSeconds: 20
+          resources:
+            requests:
+              cpu: 200m
+              memory: 256Mi
+            limits:
+              cpu: "2"
+              memory: 768Mi

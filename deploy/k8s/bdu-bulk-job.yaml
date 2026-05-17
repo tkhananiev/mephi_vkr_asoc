@@ -1,0 +1,57 @@
+# Одноразовый триггер полного импорта БДУ внутри кластера (POST к reference-data-service).
+# Полная инструкция (PVC → kubectl cp → этот Job): deploy/k8s/README.md § «БДУ: полный дамп только в Kubernetes».
+# Не входит в kustomization (не кати при каждом apply стенда).
+#
+# Перед повторным запуском удали завершённый Job:
+#   kubectl -n asoc delete job bdu-bulk --ignore-not-found
+#
+# Запуск:
+#   kubectl apply -f deploy/k8s/bdu-bulk-job.yaml
+#
+# Лог ответа сервиса (JSON со счётчиками в конце запроса):
+#   kubectl -n asoc logs -f job/bdu-bulk
+#
+# Наблюдение роста строк в каталоге (с твоей машины, раз в 15 с):
+#   while true; do kubectl -n asoc exec postgres-0 -- psql -U asoc -d asoc -tAc \
+#     "SELECT COUNT(*) FROM catalog.reference_records WHERE source_code='bdu_fstec';"; sleep 15; done
+#
+# Последние синки:
+#   kubectl -n asoc exec postgres-0 -- psql -U asoc -d asoc -c \
+#     "SELECT id,status,items_processed,items_inserted,items_updated,error_message,started_at FROM audit.reference_sync_runs WHERE source_code='bdu_fstec' ORDER BY started_at DESC LIMIT 5;"
+#
+# Требования: reference-data-service с APP_BDU_BULK_ENABLED и URL или APP_BDU_*_PATH к файлам (как в workloads).
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: bdu-bulk
+  namespace: asoc
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 86400
+  activeDeadlineSeconds: 28800
+  template:
+    metadata:
+      labels:
+        app: bdu-bulk-trigger
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: trigger
+          image: curlimages/curl:8.11.1
+          args:
+            - --silent
+            - --show-error
+            - --write-out
+            - "\nhttp_code=%{http_code} time_total=%{time_total}s\n"
+            - --max-time
+            - "0"
+            - -X
+            - POST
+            - http://reference-data-service:8081/api/v1/sync/bdu/bulk
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              memory: 64Mi

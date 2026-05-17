@@ -27,9 +27,24 @@ func New(syncService *service.SyncService) *Handler {
 func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/health", h.handleHealth)
 	mux.HandleFunc("/api/v1/sync/bdu", h.handleSyncBDU)
+	mux.HandleFunc("/api/v1/sync/bdu/bulk", h.handleSyncBDUBulk)
 	mux.HandleFunc("/api/v1/sync/nvd", h.handleSyncNVD)
 	mux.HandleFunc("/api/v1/sync/all", h.handleSyncAll)
 	mux.HandleFunc("/api/v1/sync/runs", h.handleListRuns)
+	mux.HandleFunc("/api/v1/sync/status", h.handleCatalogStatus)
+}
+
+func (h *Handler) handleCatalogStatus(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		return
+	}
+	out, err := h.syncService.CatalogStatus(r.Context())
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, out)
 }
 
 func (h *Handler) handleHealth(w http.ResponseWriter, _ *http.Request) {
@@ -51,6 +66,21 @@ func (h *Handler) handleSyncBDU(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusAccepted, result)
 }
 
+func (h *Handler) handleSyncBDUBulk(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		return
+	}
+	ctx, cancel := longRunningSyncContext()
+	defer cancel()
+	result, err := h.syncService.SyncBDUBulk(ctx)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusAccepted, result)
+}
+
 func (h *Handler) handleSyncNVD(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
@@ -65,6 +95,9 @@ func (h *Handler) handleSyncNVD(w http.ResponseWriter, r *http.Request) {
 	if cveID != "" {
 		result, err = h.syncService.SyncNVDByCVE(r.Context(), cveID)
 	} else {
+		if r.URL.Query().Get("full") == "1" {
+			_ = h.syncService.ResetNVDCursor(r.Context())
+		}
 		ctx, cancel := longRunningSyncContext()
 		defer cancel()
 		result, err = h.syncService.SyncNVD(ctx)

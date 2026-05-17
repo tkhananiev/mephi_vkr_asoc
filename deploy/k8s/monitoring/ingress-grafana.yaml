@@ -1,0 +1,32 @@
+# Grafana (kube-prometheus-stack): внешний доступ через тот же ingress-nginx + cert-manager, что и ASOC.
+# Namespace monitoring обязателен — Service kps-grafana создан Helm-релизом kps здесь.
+# DNS: A/AAAA запись grafana.atomic-asoc.ru → внешний IP Ingress Controller.
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: grafana
+  namespace: monitoring
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    acme.cert-manager.io/http01-edit-in-place: "true"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-body-size: "32m"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - grafana.atomic-asoc.ru
+      secretName: grafana-atomic-asoc-tls
+  rules:
+    - host: grafana.atomic-asoc.ru
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: kps-grafana
+                port:
+                  number: 80

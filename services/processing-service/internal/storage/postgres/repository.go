@@ -19,13 +19,13 @@ func New(pool *pgxpool.Pool) *Repository {
 	return &Repository{pool: pool}
 }
 
-func (r *Repository) StartRun(ctx context.Context, sourceName string, findingsReceived int) (int64, error) {
+func (r *Repository) StartRun(ctx context.Context, sourceName string, findingsReceived int, ownerUserID *int64) (int64, error) {
 	var id int64
 	err := r.pool.QueryRow(ctx, `
-		INSERT INTO core.processing_runs (source_name, status, findings_received)
-		VALUES ($1, 'running', $2)
+		INSERT INTO core.processing_runs (source_name, status, findings_received, owner_user_id)
+		VALUES ($1, 'running', $2, $3)
 		RETURNING id
-	`, sourceName, findingsReceived).Scan(&id)
+	`, sourceName, findingsReceived, ownerUserID).Scan(&id)
 	return id, err
 }
 
@@ -93,6 +93,21 @@ func (r *Repository) FindReferenceRecordIDByCWE(ctx context.Context, cwe string)
 		return nil, nil
 	}
 	return &id, nil
+}
+
+func (r *Repository) FindCVEAliasByReferenceRecordID(ctx context.Context, referenceRecordID int64) (string, error) {
+	var alias string
+	err := r.pool.QueryRow(ctx, `
+		SELECT alias_value
+		FROM catalog.reference_aliases
+		WHERE reference_record_id = $1 AND alias_type = 'CVE'
+		ORDER BY alias_value
+		LIMIT 1
+	`, referenceRecordID).Scan(&alias)
+	if err != nil {
+		return "", nil
+	}
+	return strings.TrimSpace(alias), nil
 }
 
 // normalizeCWEAliasValue приводит к виду CWE-<id> для сопоставления с catalog.reference_aliases.
@@ -178,13 +193,17 @@ func (r *Repository) LinkGroupToVulnerability(ctx context.Context, groupID, vuln
 	return err
 }
 
-func (r *Repository) ListGroups(ctx context.Context, limit int) ([]models.VulnerabilityGroup, error) {
+func (r *Repository) ListGroups(ctx context.Context, limit int, ownerUserID *int64) ([]models.VulnerabilityGroup, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT id, group_key, grouping_rule, severity_max, assets_count, status
 		FROM core.vulnerability_groups
+		WHERE (
+			$2::bigint IS NULL
+			OR group_key LIKE ('u:' || $2::bigint::text || ':%')
+		)
 		ORDER BY updated_at DESC
 		LIMIT $1
-	`, limit)
+	`, limit, ownerUserID)
 	if err != nil {
 		return nil, err
 	}
@@ -201,7 +220,7 @@ func (r *Repository) ListGroups(ctx context.Context, limit int) ([]models.Vulner
 	return result, rows.Err()
 }
 
-func (r *Repository) ListVulnerabilityReport(ctx context.Context, limit int) ([]models.VulnerabilityReportRow, error) {
+func (r *Repository) ListVulnerabilityReport(ctx context.Context, limit int, ownerUserID *int64) ([]models.VulnerabilityReportRow, error) {
 	if limit <= 0 || limit > 500 {
 		limit = 200
 	}
@@ -214,6 +233,10 @@ func (r *Repository) ListVulnerabilityReport(ctx context.Context, limit int) ([]
 			FROM core.finding_vulnerabilities fv
 			JOIN core.findings f ON f.id = fv.finding_id
 			LEFT JOIN core.processing_runs pr ON pr.id = f.processing_run_id
+			WHERE (
+				$2::bigint IS NULL
+				OR pr.owner_user_id = $2
+			)
 			ORDER BY fv.vulnerability_id, pr.started_at DESC NULLS LAST, f.id DESC
 		)
 		SELECT
@@ -221,7 +244,19 @@ func (r *Repository) ListVulnerabilityReport(ctx context.Context, limit int) ([]
 			g.group_key,
 			v.id,
 			COALESCE(v.cve_id, ''),
-			CASE WHEN rr.source_code LIKE 'bdu%' THEN COALESCE(rr.external_id, '') ELSE '' END,
+			COALESCE(
+				CASE WHEN rr.source_code IS NOT NULL AND rr.source_code LIKE 'bdu%' THEN rr.external_id END,
+				(SELECT bdu_rr.external_id
+				 FROM catalog.reference_records bdu_rr
+				 INNER JOIN catalog.reference_aliases bdu_ra ON bdu_ra.reference_record_id = bdu_rr.id
+				 WHERE bdu_rr.source_code LIKE 'bdu%'
+				   AND TRIM(COALESCE(v.cve_id, '')) <> ''
+				   AND bdu_ra.alias_type = 'CVE'
+				   AND bdu_ra.alias_value = TRIM(v.cve_id)
+				 ORDER BY bdu_rr.updated_at DESC
+				 LIMIT 1),
+				''
+			),
 			COALESCE(sp.scanner_name, ''),
 			COALESCE(v.product, ''),
 			COALESCE(v.version, ''),
@@ -233,9 +268,19 @@ func (r *Repository) ListVulnerabilityReport(ctx context.Context, limit int) ([]
 		JOIN core.vulnerability_groups g ON g.id = gv.group_id
 		LEFT JOIN catalog.reference_records rr ON rr.id = v.reference_record_id
 		LEFT JOIN scanner_pick sp ON sp.vulnerability_id = v.id
+		WHERE (
+			$2::bigint IS NULL
+			OR EXISTS (
+				SELECT 1
+				FROM core.finding_vulnerabilities fv_o
+				JOIN core.findings f_o ON f_o.id = fv_o.finding_id
+				LEFT JOIN core.processing_runs pr_o ON pr_o.id = f_o.processing_run_id
+				WHERE fv_o.vulnerability_id = v.id AND pr_o.owner_user_id = $2
+			)
+		)
 		ORDER BY g.id, v.id
 		LIMIT $1
-	`, limit)
+	`, limit, ownerUserID)
 	if err != nil {
 		return nil, err
 	}

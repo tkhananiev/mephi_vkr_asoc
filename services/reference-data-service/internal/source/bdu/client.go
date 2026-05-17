@@ -42,21 +42,33 @@ var cvePattern = regexp.MustCompile(`CVE-\d{4}-\d+`)
 // bduFeedUserAgent ФСТЭК и ряд госсайтов отдают 403 на дефолтный Go-http-client.
 const bduFeedUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
 
-// New создаёт клиент БДУ. skipTLSVerify — пропуск проверки сертификата (нужно, если УЦ ФСТЭК нет в системном хранилище).
-// rootCAPEMPath — путь к PEM с дополнительным корневым/промежуточным УЦ; если не пусто, используется доверенный пул вместо skipTLSVerify.
-func New(feedURL string, skipTLSVerify bool, rootCAPEMPath string) (*Client, error) {
+// NewHTTPClient — общий HTTP-клиент для ресурсов bdu.fstec.ru (тот же TLS, что у RSS).
+func NewHTTPClient(skipTLSVerify bool, rootCAPEMPath string, timeout time.Duration) (*http.Client, error) {
 	tlsConfig, err := bduTLSConfig(skipTLSVerify, rootCAPEMPath)
 	if err != nil {
 		return nil, err
 	}
-	return &Client{
-		httpClient: &http.Client{
-			Timeout: 30 * time.Second,
-			Transport: &http.Transport{
-				TLSClientConfig: tlsConfig,
-			},
+	if timeout <= 0 {
+		timeout = 30 * time.Second
+	}
+	return &http.Client{
+		Timeout: timeout,
+		Transport: &http.Transport{
+			TLSClientConfig: tlsConfig,
 		},
-		feedURL: feedURL,
+	}, nil
+}
+
+// New создаёт клиент БДУ. skipTLSVerify — пропуск проверки сертификата (нужно, если УЦ ФСТЭК нет в системном хранилище).
+// rootCAPEMPath — путь к PEM с дополнительным корневым/промежуточным УЦ; если не пусто, используется доверенный пул вместо skipTLSVerify.
+func New(feedURL string, skipTLSVerify bool, rootCAPEMPath string) (*Client, error) {
+	httpClient, err := NewHTTPClient(skipTLSVerify, rootCAPEMPath, 30*time.Second)
+	if err != nil {
+		return nil, err
+	}
+	return &Client{
+		httpClient: httpClient,
+		feedURL:    feedURL,
 	}, nil
 }
 

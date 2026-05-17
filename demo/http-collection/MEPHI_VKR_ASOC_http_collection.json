@@ -52,6 +52,20 @@
       }
     },
     {
+      "name": "Sync BDU Bulk (vulxml + vullist)",
+      "description": "Долгий запрос: полный импорт из vulxml.zip и vullist.xlsx. Локальные файлы: APP_BDU_VULXML_ZIP_PATH, APP_BDU_VULLIST_XLSX_PATH. Иначе скачивание по URL из ENVIRONMENT.md.",
+      "request": {
+        "method": "POST",
+        "url": {
+          "raw": "http://localhost:8081/api/v1/sync/bdu/bulk",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "8081",
+          "path": ["api", "v1", "sync", "bdu", "bulk"]
+        }
+      }
+    },
+    {
       "name": "Run Semgrep Scenario",
       "description": "Тело без target_path: подставятся APP_DEFAULT_SCAN_TARGET_PATH (/app/demo/scan-targets/WebGoat/) и APP_DEFAULT_SEMGREP_CONFIG (p/java).",
       "request": {
@@ -64,14 +78,14 @@
         ],
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"scanner_name\": \"semgrep\"\n}"
+          "raw": "{\n  \"scanner_id\": \"semgrep\",\n  \"scanner_name\": \"semgrep\"\n}"
         },
         "url": {
-          "raw": "http://localhost:8080/api/v1/scans/semgrep",
+          "raw": "http://localhost:8080/api/v1/scans",
           "protocol": "http",
           "host": ["localhost"],
           "port": "8080",
-          "path": ["api", "v1", "scans", "semgrep"]
+          "path": ["api", "v1", "scans"]
         }
       }
     },

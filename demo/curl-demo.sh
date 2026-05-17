@@ -8,12 +8,16 @@ curl -s http://localhost:8081/health && echo
 curl -s http://localhost:8082/health && echo
 curl -s http://localhost:8083/health && echo
 curl -s http://localhost:8090/health && echo
+curl -s http://localhost:8085/health && echo
+curl -s http://localhost:8086/health && echo
 
 echo "[2/5] sync NVD"
 curl -s -X POST "http://localhost:8081/api/v1/sync/nvd?cve_id=CVE-2021-44228" && echo
 
-echo "[3/5] sync BDU"
+echo "[3/5] sync BDU (RSS)"
 curl -s -X POST "http://localhost:8081/api/v1/sync/bdu" && echo
+# Полный импорт ФСТЭК (vulxml+vullist) — раскомментировать при нужде; может занять много времени:
+# curl --max-time 0 -s -X POST "http://localhost:8081/api/v1/sync/bdu/bulk" && echo
 
 echo "[4/5] clone WebGoat if missing"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -24,6 +28,11 @@ else
 fi
 
 echo "[5/5] run semgrep flow (defaults: WebGoat + p/java from APP_DEFAULT_*)"
-curl -s -X POST "http://localhost:8080/api/v1/scans/semgrep" \
+curl -s -X POST "http://localhost:8080/api/v1/scans" \
   -H "Content-Type: application/json" \
-  -d '{"scanner_name":"semgrep"}' && echo
+  -d '{"scanner_id":"semgrep","scanner_name":"semgrep"}' && echo
+
+echo "optional: run gitleaks flow (scanner_id gitleaks; нужен запущенный gitleaks-service :8086)"
+curl -s -X POST "http://localhost:8080/api/v1/scans" \
+  -H "Content-Type: application/json" \
+  -d '{"scanner_id":"gitleaks","scanner_name":"gitleaks"}' && echo

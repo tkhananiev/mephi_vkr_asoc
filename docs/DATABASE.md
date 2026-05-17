@@ -73,6 +73,7 @@
 | `vulnerabilities_created` | Сколько **новых** строк в `core.vulnerabilities` (повторы по сигнатуре не считаются как созданные). |
 | `groups_updated` | В коде инкрементируется на каждую обработанную находку (не «число уникальных групп»). |
 | `error_message` | Текст ошибки при `failed`. |
+| **`owner_user_id`** | _(миграция `014`.)_ Привязка прогона к **`authn.console_users.id`**; `NULL` — прогон без владельца (API-ключ, прямой HTTP-ingest без пользователя). Используется для фильтров отчёта и групп по консольному пользователю. |
 
 **Пишет / читает:** `processing-service`.
 
@@ -123,10 +124,18 @@
 
 ### `core.vulnerability_groups`
 
-**Группа** для агрегирования (и дальше — тикет): уникальный `group_key` (в коде строка вида `CVE::CWE::component::version`), `grouping_rule` (например `cve_component_version`), `severity_max`, `assets_count`, `status` (`open`).
+**Группа** для агрегирования (и дальше — тикет): уникальный **`group_key`** по-прежнему глобален по таблице; для прогона с **`owner_user_id`** в ключ добавляется префикс вида **`u:<id>:`**, чтобы находки разных пользователей не смешивались в одной строке группы. Базовая часть без префикса — как раньше: `CVE::CWE::component::version` (после нормализации полей).
 
 **Пишет:** `processing-service` (`UPSERT` по `group_key`).  
-**Читает:** `processing-service` (`GET /api/v1/groups`); `api-service` дергает этот API после ingest.
+**Читает:** `processing-service` (`GET /api/v1/groups`); браузер идёт через **`api-service`**, который проксирует запрос и ограничивает выборку по пользователю JWT **`role=user`**.
+
+---
+
+### `core.console_products` (миграция `014`)
+
+**Продукты консоли** пользователя (`owner_user_id` → **`authn.console_users`**): имя, описание, поля SCM (`repository_url`, `repository_ref`, `repository_subdirectory`), `scan_target_path` (демо-путь без SCM).
+
+**Пишет / читает:** **`api-service`** (`GET` / `POST /api/v1/console/products`; только JWT консольного пользователя).
 
 ---
 
@@ -172,9 +181,13 @@ SELECT source_code, COUNT(*) FROM catalog.reference_records GROUP BY 1;
 SELECT id, source_code, status, items_processed, started_at
 FROM audit.reference_sync_runs ORDER BY started_at DESC LIMIT 10;
 
--- Последние прогоны обработки находок
-SELECT id, source_name, status, findings_received, findings_processed, vulnerabilities_created
+-- Последние прогоны обработки находок (с владельцем консоли, если задан миграцией 014+)
+SELECT id, source_name, owner_user_id, status, findings_received, findings_processed, vulnerabilities_created
 FROM core.processing_runs ORDER BY started_at DESC LIMIT 10;
+
+-- Продукты консоли по пользователям (после миграции 014)
+SELECT id, owner_user_id, name, left(repository_url, 60) AS repo
+FROM core.console_products ORDER BY created_at DESC LIMIT 20;
 
 -- Сколько сырых находок и уязвимостей
 SELECT (SELECT COUNT(*) FROM core.findings) AS findings,
@@ -197,5 +210,7 @@ FROM integration.ticket_links ORDER BY id;
 | `003_integration_schema.sql` | `integration.ticket_links`. |
 | `004_demo_seed.sql` | Сиды `catalog` для демо. |
 | `005_demo_cwe_alias.sql` | Доп. алиас CWE для демо. |
+| `006` … `013` | См. каталог `migrations/` и `deploy/k8s/kustomization.yaml` (синк курсоров, `authn`, отложенная регистрация, демо-алиасы и т.д.). |
+| **`014_console_products_and_run_owner.sql`** | `core.console_products`, колонка **`core.processing_runs.owner_user_id`**. |
 
 Краткая карта сервисов ↔ таблицы: [`docs/SERVICES_AND_DATA.md`](SERVICES_AND_DATA.md).

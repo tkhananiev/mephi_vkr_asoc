@@ -1,0 +1,37 @@
+# Фрагмент values для helm install kube-prometheus-stack (дополните при необходимости).
+# Полный список: helm show values prometheus-community/kube-prometheus-stack
+
+grafana:
+  enabled: true
+  # Корректные редиректы и cookie за HTTPS Ingress (см. ingress-grafana.yaml)
+  grafana.ini:
+    server:
+      domain: grafana.atomic-asoc.ru
+      root_url: https://grafana.atomic-asoc.ru/
+  sidecar:
+    dashboards:
+      enabled: true
+      label: grafana_dashboard
+    datasources:
+      enabled: true
+  # Можно смонтировать кастомный дашборд через ConfigMap с лейблом — проще импорт JSON из README.
+
+prometheus:
+  prometheusSpec:
+    retention: 7d
+    resources:
+      requests:
+        cpu: 200m
+        memory: 512Mi
+    # Скрап внутренних компонентов ASOC (опционально) — при появлении ServiceMonitor/PodMonitor.
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+
+defaultRules:
+  create: true
+
+kube-state-metrics:
+  enabled: true
+
+nodeExporter:
+  enabled: true

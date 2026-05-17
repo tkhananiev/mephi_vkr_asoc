@@ -1,4 +1,4 @@
-# Статика + reverse proxy (см. mephi_vkr_asoc_front/nginx/default.conf). Образ: в mephi_vkr_asoc_front — docker build -t asoc/web:latest .
+# Статика + reverse proxy (см. mephi_vkr_asoc_front/nginx/default.conf). Образ: cr.selcloud.ru/atomic-asoc/web:latest
 ---
 apiVersion: v1
 kind: Service
@@ -18,6 +18,8 @@ metadata:
   name: asoc-web
   namespace: asoc
 spec:
+  strategy:
+    type: Recreate
   replicas: 1
   selector:
     matchLabels:
@@ -27,10 +29,12 @@ spec:
       labels:
         app: asoc-web
     spec:
+      imagePullSecrets:
+        - name: selcloud-registry
       containers:
         - name: web
-          image: asoc/web:latest
-          imagePullPolicy: IfNotPresent
+          image: cr.selcloud.ru/atomic-asoc/web:latest
+          imagePullPolicy: Always
           ports:
             - containerPort: 80
           readinessProbe:

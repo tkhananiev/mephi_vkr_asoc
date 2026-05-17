@@ -5,6 +5,8 @@ import "time"
 type IngestRequest struct {
 	ScannerName string       `json:"scanner_name"`
 	Findings    []FindingDTO `json:"findings"`
+	// OwnerUserID — пользователь консоли (authn.console_users.id); задаётся api-service при JWT role=user.
+	OwnerUserID *int64 `json:"owner_user_id,omitempty"`
 }
 
 type FindingDTO struct {

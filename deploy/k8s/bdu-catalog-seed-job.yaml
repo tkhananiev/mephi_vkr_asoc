@@ -1,0 +1,45 @@
+# Одноразовая заливка тома bdu-catalog-import файлами с сайта ФСТЭК (vulxml.zip + vullist.xlsx).
+# Нужно после свежего PVC и до сценария «только из тома», без приложения локальных дампов руками.
+# Не входит в kustomization.
+#
+#   kubectl apply -f deploy/k8s/bdu-catalog-seed-job.yaml && kubectl -n asoc wait --for=condition=complete job/bdu-catalog-seed --timeout=45m && kubectl logs -n asoc job/bdu-catalog-seed
+#
+# Повтор: kubectl -n asoc delete job bdu-catalog-seed --ignore-not-found
+#
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: bdu-catalog-seed
+  namespace: asoc
+spec:
+  backoffLimit: 5
+  activeDeadlineSeconds: 3600
+  ttlSecondsAfterFinished: 86400
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: fetch
+          image: curlimages/curl:8.11.1
+          command: ["sh", "-c"]
+          args:
+            - |
+              set -eu
+              T=/tmp/bdu-fetch
+              mkdir -p "$T"
+              rm -rf "$T"/*
+              mkdir -p /bdu-import
+              # Сеть → локальный ephemeral (быстрый SSD пода); на PVC только mv (меньше curl (23) на медленном/занятом томе).
+              curl -fsSL --insecure --connect-timeout 30 --retry 6 --retry-delay 15 \
+                -o "$T/vulxml.zip" "https://bdu.fstec.ru/files/documents/vulxml.zip"
+              curl -fsSL --insecure --connect-timeout 30 --retry 6 --retry-delay 15 \
+                -o "$T/vullist.xlsx" "https://bdu.fstec.ru/files/documents/vullist.xlsx"
+              mv -f "$T/vulxml.zip" "$T/vullist.xlsx" /bdu-import/
+              ls -la /bdu-import
+          volumeMounts:
+            - name: data
+              mountPath: /bdu-import
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: bdu-catalog-import

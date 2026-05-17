@@ -6,34 +6,80 @@ import (
 )
 
 type Config struct {
-	HTTPPort             string
-	ProcessingServiceURL string
-	JiraServiceURL       string
-	SemgrepServiceURL    string
-	KafkaBrokers         []string
-	KafkaTopicIngest     string
-	KafkaTopicResult     string
-	// DefaultScanTargetPath — путь к каталогу исходников в контейнере semgrep-service (если в теле запроса нет target_path).
-	DefaultScanTargetPath string
-	// DefaultSemgrepConfig — например p/java; передаётся в semgrep-service, если в запросе нет semgrep_config.
-	DefaultSemgrepConfig string
-	// AuthAPIKey — если не пусто, для путей /api/* требуется Authorization: Bearer <ключ> или X-API-Key. /health и Swagger без ключа.
-	AuthAPIKey string
+	HTTPPort                string
+	ProcessingServiceURL    string
+	JiraServiceURL          string
+	SemgrepServiceURL       string
+	GitleaksServiceURL      string
+	KafkaBrokers            []string
+	KafkaTopicIngest        string
+	KafkaTopicResult        string
+	DefaultScanTargetPath   string
+	DefaultSemgrepConfig    string
+	AuthAPIKey              string
+	RequireKafkaForFindings bool
+
+	// Путь JSON-файла с «дополнительными» сканерами (админ PUT). Пусто — только память между рестартами.
+	IntegrationOverlayPath string
+
+	// JWT только для проверки Bearer-токена (тот же секрет, что и у auth-service). Без секрета — только API-ключ для /api/*.
+	JWTSecret string
+	JWTTTL    string
+
+	// Опасно: доступ к Docker CLI на хосте (только compose-стенд с смонтированным /var/run/docker.sock). Выключено по умолчанию.
+	DockerOpsEnabled bool
+	DockerCLIPath    string
+
+	// Kubernetes: логи подов и rollout restart деплоев (нужен RBAC и ServiceAccount). Приоритетнее Docker.
+	K8SOpsEnabled   bool
+	K8SNamespace    string
+	K8SPodContainer string // обычно app (см. workloads.yaml)
+
+	// PostgreSQL: продукты консоли (core.console_products). Пусто — эндпойнты продуктов вернут 503.
+	PostgresDSN string
 }
 
 func Load() Config {
 	return Config{
-		HTTPPort:             getEnv("APP_HTTP_PORT", "8080"),
-		ProcessingServiceURL: getEnv("APP_PROCESSING_SERVICE_URL", "http://localhost:8082"),
-		JiraServiceURL:      getEnv("APP_JIRA_SERVICE_URL", "http://localhost:8083"),
-		SemgrepServiceURL:    getEnv("APP_SEMGREP_SERVICE_URL", "http://localhost:8085"),
-		KafkaBrokers:         splitCSV(getEnv("APP_KAFKA_BROKERS", "")),
-		KafkaTopicIngest:     getEnv("APP_KAFKA_TOPIC_FINDINGS_INGEST", "asoc.findings.ingest"),
-		KafkaTopicResult:     getEnv("APP_KAFKA_TOPIC_FINDINGS_RESULT", "asoc.findings.ingest.result"),
-		// Путь внутри контейнера semgrep-service; по умолчанию WebGoat из demo/scan-targets (см. clone-webgoat.sh).
-		DefaultScanTargetPath: getEnv("APP_DEFAULT_SCAN_TARGET_PATH", "/app/demo/scan-targets/WebGoat/"),
-		DefaultSemgrepConfig: getEnv("APP_DEFAULT_SEMGREP_CONFIG", "p/java"),
-		AuthAPIKey:            os.Getenv("APP_AUTH_API_KEY"),
+		HTTPPort:                getEnv("APP_HTTP_PORT", "8080"),
+		ProcessingServiceURL:    getEnv("APP_PROCESSING_SERVICE_URL", "http://localhost:8082"),
+		JiraServiceURL:          getEnv("APP_JIRA_SERVICE_URL", "http://localhost:8083"),
+		SemgrepServiceURL:       getEnv("APP_SEMGREP_SERVICE_URL", "http://localhost:8085"),
+		GitleaksServiceURL:      getEnv("APP_GITLEAKS_SERVICE_URL", "http://localhost:8086"),
+		KafkaBrokers:            splitCSV(getEnv("APP_KAFKA_BROKERS", "")),
+		KafkaTopicIngest:        getEnv("APP_KAFKA_TOPIC_FINDINGS_INGEST", "asoc.findings.ingest"),
+		KafkaTopicResult:        getEnv("APP_KAFKA_TOPIC_FINDINGS_RESULT", "asoc.findings.ingest.result"),
+		DefaultScanTargetPath:   getEnv("APP_DEFAULT_SCAN_TARGET_PATH", "/app/demo/scan-targets/WebGoat/"),
+		DefaultSemgrepConfig:    getEnv("APP_DEFAULT_SEMGREP_CONFIG", "p/java"),
+		AuthAPIKey:              os.Getenv("APP_AUTH_API_KEY"),
+		RequireKafkaForFindings: getBoolEnv("APP_REQUIRE_KAFKA_FOR_FINDINGS_INGEST", false),
+
+		IntegrationOverlayPath: getEnv("APP_INTEGRATIONS_OVERLAY_PATH", ""),
+
+		JWTSecret: os.Getenv("APP_JWT_SECRET"),
+		JWTTTL:    getEnv("APP_JWT_TTL", "168h"),
+
+		DockerOpsEnabled: getBoolEnv("APP_DOCKER_OPS_ENABLED", false),
+		DockerCLIPath:    getEnv("APP_DOCKER_CLI", "docker"),
+
+		K8SOpsEnabled:   getBoolEnv("APP_K8S_OPS_ENABLED", false),
+		K8SNamespace:    getEnv("APP_K8S_NAMESPACE", "asoc"),
+		K8SPodContainer: getEnv("APP_K8S_POD_CONTAINER", "app"),
+
+		PostgresDSN: strings.TrimSpace(os.Getenv("APP_POSTGRES_DSN")),
+	}
+}
+
+func getBoolEnv(key string, fallback bool) bool {
+	v := strings.TrimSpace(os.Getenv(key))
+	if v == "" {
+		return fallback
+	}
+	switch strings.ToLower(v) {
+	case "1", "true", "yes", "on", "y":
+		return true
+	default:
+		return false
 	}
 }
 

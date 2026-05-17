@@ -14,5 +14,9 @@ FROM alpine:3.20
 RUN apk --no-cache add ca-certificates
 COPY --from=builder /out/reference-data-service /usr/local/bin/reference-data-service
 
+# Полный дамп БДУ (обновляются в deploy/embed/bdu-bundled/ перед сборкой при необходимости).
+COPY deploy/embed/bdu-bundled/vulxml.zip /opt/asoc/bdu-default/vulxml.zip
+COPY deploy/embed/bdu-bundled/vullist.xlsx /opt/asoc/bdu-default/vullist.xlsx
+
 EXPOSE 8081
 CMD ["reference-data-service"]

@@ -1,8 +1,12 @@
-# Доступ по IP без FQDN: в rules не задаётся host — матчится любой Host, в т.ч. http://<IP>/...
-# Jira mock: префикс /jira срезается rewrite'ом (см. второй Ingress).
+# ingress-nginx.
+# TLS: cert-manager выпускает Let's Encrypt → Secret asoc-tls (HTTP-01, ClusterIssuer letsencrypt-prod).
+# Доступ по https://<IP>: LE не выдаёт сертификаты на голый IP — SAN только по доменам; server-alias остаётся для HTTP-маршрутизации.
 #
-# ingress-nginx: повесь зарезервированный IP на Service типа LoadBalancer контроллера
-# (в панели Selectel / доке кластера). Здесь IP не задаётся — только маршрутизация.
+# API и прочие бэкенды наружу: трафик на asoc-web (nginx в образе фронта проксирует на
+# api-service, auth-service, reference-data-service, processing-service, jira-integration — см. mephi_vkr_asoc_front/nginx/default.conf).
+# Явные пути ниже — для читаемости манифеста (Prefix / тоже покрыл бы /api; порядок: более длинные префиксы).
+#
+# Jira mock: отдельный Ingress asoc-jira — префикс /jira + rewrite.
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
@@ -10,14 +14,194 @@ metadata:
   name: asoc-app
   namespace: asoc
   annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    acme.cert-manager.io/http01-edit-in-place: "true"
     nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
     nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
     nginx.ingress.kubernetes.io/proxy-body-size: "32m"
+    nginx.ingress.kubernetes.io/server-alias: "45.80.129.36"
 spec:
   ingressClassName: nginx
+  tls:
+    - hosts:
+        - atomic-asoc.ru
+        - www.atomic-asoc.ru
+        - platform.atomic-asoc.ru
+      secretName: asoc-tls
   rules:
+    - host: atomic-asoc.ru
+      http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: asoc-web
+                port:
+                  number: 80
+          - path: /auth
+            pathType: Prefix
+            backend:
+              service:
+                name: asoc-web
+                port:
+                  number: 80
+          - path: /openapi.yaml
+            pathType: Exact
+            backend:
+              service:
+                name: asoc-web
+                port:
+                  number: 80
+          - path: /swagger
+            pathType: Prefix
+            backend:
+              service:
+                name: asoc-web
+                port:
+                  number: 80
+          - path: /health
+            pathType: Prefix
+            backend:
+              service:
+                name: asoc-web
+                port:
+                  number: 80
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: asoc-web
+                port:
+                  number: 80
+    - host: www.atomic-asoc.ru
+      http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: asoc-web
+                port:
+                  number: 80
+          - path: /auth
+            pathType: Prefix
+            backend:
+              service:
+                name: asoc-web
+                port:
+                  number: 80
+          - path: /openapi.yaml
+            pathType: Exact
+            backend:
+              service:
+                name: asoc-web
+                port:
+                  number: 80
+          - path: /swagger
+            pathType: Prefix
+            backend:
+              service:
+                name: asoc-web
+                port:
+                  number: 80
+          - path: /health
+            pathType: Prefix
+            backend:
+              service:
+                name: asoc-web
+                port:
+                  number: 80
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: asoc-web
+                port:
+                  number: 80
+    - host: platform.atomic-asoc.ru
+      http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: asoc-web
+                port:
+                  number: 80
+          - path: /auth
+            pathType: Prefix
+            backend:
+              service:
+                name: asoc-web
+                port:
+                  number: 80
+          - path: /openapi.yaml
+            pathType: Exact
+            backend:
+              service:
+                name: asoc-web
+                port:
+                  number: 80
+          - path: /swagger
+            pathType: Prefix
+            backend:
+              service:
+                name: asoc-web
+                port:
+                  number: 80
+          - path: /health
+            pathType: Prefix
+            backend:
+              service:
+                name: asoc-web
+                port:
+                  number: 80
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: asoc-web
+                port:
+                  number: 80
+    # По IP или при Host без DNS: правила без host — иначе трафик на 45.80.129.36 не матчился бы rules выше (кластер принимает SNI/host иной).
     - http:
         paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: asoc-web
+                port:
+                  number: 80
+          - path: /auth
+            pathType: Prefix
+            backend:
+              service:
+                name: asoc-web
+                port:
+                  number: 80
+          - path: /openapi.yaml
+            pathType: Exact
+            backend:
+              service:
+                name: asoc-web
+                port:
+                  number: 80
+          - path: /swagger
+            pathType: Prefix
+            backend:
+              service:
+                name: asoc-web
+                port:
+                  number: 80
+          - path: /health
+            pathType: Prefix
+            backend:
+              service:
+                name: asoc-web
+                port:
+                  number: 80
           - path: /
             pathType: Prefix
             backend:
@@ -34,9 +218,46 @@ metadata:
   annotations:
     nginx.ingress.kubernetes.io/use-regex: "true"
     nginx.ingress.kubernetes.io/rewrite-target: /$2
+    nginx.ingress.kubernetes.io/server-alias: "45.80.129.36"
 spec:
   ingressClassName: nginx
+  tls:
+    - hosts:
+        - atomic-asoc.ru
+        - www.atomic-asoc.ru
+        - platform.atomic-asoc.ru
+      secretName: asoc-tls
   rules:
+    - host: atomic-asoc.ru
+      http:
+        paths:
+          - path: /jira(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: jira-mock
+                port:
+                  number: 8090
+    - host: www.atomic-asoc.ru
+      http:
+        paths:
+          - path: /jira(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: jira-mock
+                port:
+                  number: 8090
+    - host: platform.atomic-asoc.ru
+      http:
+        paths:
+          - path: /jira(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: jira-mock
+                port:
+                  number: 8090
     - http:
         paths:
           - path: /jira(/|$)(.*)

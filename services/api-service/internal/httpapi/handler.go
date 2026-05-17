@@ -2,34 +2,193 @@ package httpapi
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 
+	"mephi_vkr_asoc/services/api-service/internal/integrationstore"
 	"mephi_vkr_asoc/services/api-service/internal/models"
+	"mephi_vkr_asoc/services/api-service/internal/ops"
+	"mephi_vkr_asoc/services/api-service/internal/products"
 	"mephi_vkr_asoc/services/api-service/internal/service"
 )
 
 type Handler struct {
-	orchestrator           *service.Orchestrator
-	defaultScanTargetPath  string
-	defaultSemgrepConfig     string
+	orchestrator          *service.Orchestrator
+	defaultScanTargetPath string
+	defaultSemgrepConfig  string
+	jwtSecret             []byte
+	podOps                ops.Backend
+	integrationStore      *integrationstore.Store
+	processingURL         string
+	httpUpstream          *http.Client
+	productStore          *products.Store
 }
 
-func New(orchestrator *service.Orchestrator, defaultScanTargetPath, defaultSemgrepConfig string) *Handler {
+func New(
+	orchestrator *service.Orchestrator,
+	defaultScanTargetPath, defaultSemgrepConfig string,
+	jwtSecret []byte,
+	podOps ops.Backend,
+	integrations *integrationstore.Store,
+	processingURL string,
+	productStore *products.Store,
+) *Handler {
+	up := defaultHTTPUpstream()
 	return &Handler{
 		orchestrator:          orchestrator,
 		defaultScanTargetPath: defaultScanTargetPath,
-		defaultSemgrepConfig:    defaultSemgrepConfig,
+		defaultSemgrepConfig:  defaultSemgrepConfig,
+		jwtSecret:             jwtSecret,
+		podOps:                podOps,
+		integrationStore:      integrations,
+		processingURL:         strings.TrimRight(processingURL, "/"),
+		httpUpstream:          up,
+		productStore:          productStore,
 	}
 }
 
 func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/health", h.handleHealth)
+	mux.HandleFunc("/api/v1/integrations", h.handleIntegrationsList)
+	mux.HandleFunc("/api/v1/admin/integrations", h.handleAdminIntegrations)
+	mux.HandleFunc("/api/v1/console/products", func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			h.handleConsoleProductsList(w, r)
+		case http.MethodPost:
+			h.handleConsoleProductsCreate(w, r)
+		default:
+			writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		}
+	})
+	mux.HandleFunc("/api/v1/groups", h.handleGroupsProxy)
+	mux.HandleFunc("/api/v1/report/vulnerabilities", h.handleReportVulnerabilitiesProxy)
+	mux.HandleFunc("/api/v1/findings/ingest", h.handlePublicFindingsIngest)
+	mux.HandleFunc("/api/v1/scans", h.handleUnifiedScan)
 	mux.HandleFunc("/api/v1/scans/semgrep", h.handleSemgrepScan)
+	mux.HandleFunc("/api/v1/admin/ops/docker/logs", h.handleDockerLogs)
+	mux.HandleFunc("/api/v1/admin/ops/docker/restart", h.handleDockerRestart)
 }
 
 func (h *Handler) handleHealth(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// handlePublicFindingsIngest — универсальный приём нормализованных находок (любой сканер/CI),
+// тот же JSON, что internal POST processing /api/v1/findings/ingest. Владелец выставляется только
+// из JWT пользователя консоли; поле owner_user_id в теле игнорируется (не доверяем клиенту).
+func (h *Handler) handlePublicFindingsIngest(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		return
+	}
+	var payload models.ProcessingIngestRequest
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json body"})
+		return
+	}
+	payload.OwnerUserID = nil
+	if uid, ok := ConsoleUserFromRequest(r); ok {
+		id := uid
+		payload.OwnerUserID = &id
+	}
+	if strings.TrimSpace(payload.ScannerName) == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "scanner_name required"})
+		return
+	}
+	res, err := h.orchestrator.IngestFindings(r.Context(), payload)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusAccepted, res)
+}
+
+func (h *Handler) handleUnifiedScan(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		return
+	}
+	var u models.UnifiedScanRequest
+	if err := json.NewDecoder(r.Body).Decode(&u); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json body"})
+		return
+	}
+	sid := strings.TrimSpace(u.ScannerID)
+	if sid == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "scanner_id required"})
+		return
+	}
+	request := u.ToScanRequest()
+	if err := h.prepareScannerTarget(sid, &request); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+
+	var owner int64
+	if uid, ok := ConsoleUserFromRequest(r); ok {
+		owner = uid
+	}
+
+	passport, err := h.orchestrator.RunScan(r.Context(), sid, request, owner)
+	if err != nil {
+		status := http.StatusBadGateway
+		if errors.Is(err, service.ErrUnsupportedScannerID) {
+			status = http.StatusBadRequest
+		}
+		writeJSON(w, status, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusAccepted, passport)
+}
+
+// prepareScannerTarget подставляет дефолты и проверяет цель в зависимости от scanner_id.
+func (h *Handler) prepareScannerTarget(scannerID string, request *models.ScanRequest) error {
+	sid := strings.ToLower(strings.TrimSpace(scannerID))
+	switch sid {
+	case "semgrep":
+		gitURL := strings.TrimSpace(request.GitRepositoryURL)
+		if gitURL != "" {
+			request.GitRepositoryURL = gitURL
+			request.GitRepositoryRef = strings.TrimSpace(request.GitRepositoryRef)
+			request.TargetPath = strings.TrimSpace(request.TargetPath)
+			return nil
+		}
+		if err := h.prepareFilesystemScanDefaults(request); err != nil {
+			return err
+		}
+		if strings.TrimSpace(request.SemgrepConfig) == "" {
+			request.SemgrepConfig = h.defaultSemgrepConfig
+		}
+		return nil
+	case "gitleaks":
+		return h.prepareFilesystemScanDefaults(request)
+	default:
+		if it, ok := h.integrationStore.LookupAdditional(scannerID); ok && strings.TrimSpace(it.ScannerInvokeURL) != "" {
+			return h.prepareFilesystemScanDefaults(request)
+		}
+		return nil
+	}
+}
+
+func (h *Handler) prepareFilesystemScanDefaults(request *models.ScanRequest) error {
+	gitURL := strings.TrimSpace(request.GitRepositoryURL)
+	if gitURL != "" {
+		request.GitRepositoryURL = gitURL
+		request.GitRepositoryRef = strings.TrimSpace(request.GitRepositoryRef)
+		request.TargetPath = strings.TrimSpace(request.TargetPath)
+		return nil
+	}
+	if strings.TrimSpace(request.TargetPath) == "" {
+		request.TargetPath = h.defaultScanTargetPath
+	}
+	request.TargetPath = strings.TrimSpace(request.TargetPath)
+	if request.TargetPath == "" {
+		return fmt.Errorf("target_path required (or set APP_DEFAULT_SCAN_TARGET_PATH)")
+	}
+	return nil
 }
 
 func (h *Handler) handleSemgrepScan(w http.ResponseWriter, r *http.Request) {
@@ -46,18 +205,17 @@ func (h *Handler) handleSemgrepScan(w http.ResponseWriter, r *http.Request) {
 	if request.ScannerName == "" {
 		request.ScannerName = "semgrep"
 	}
-	if strings.TrimSpace(request.TargetPath) == "" {
-		request.TargetPath = h.defaultScanTargetPath
-	}
-	if strings.TrimSpace(request.SemgrepConfig) == "" {
-		request.SemgrepConfig = h.defaultSemgrepConfig
-	}
-	if strings.TrimSpace(request.TargetPath) == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "target_path required (or set APP_DEFAULT_SCAN_TARGET_PATH)"})
+	if err := h.prepareScannerTarget("semgrep", &request); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
 
-	passport, err := h.orchestrator.RunSemgrepScenario(r.Context(), request)
+	var owner int64
+	if uid, ok := ConsoleUserFromRequest(r); ok {
+		owner = uid
+	}
+
+	passport, err := h.orchestrator.RunScan(r.Context(), "semgrep", request, owner)
 	if err != nil {
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
 		return
