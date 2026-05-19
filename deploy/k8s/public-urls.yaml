@@ -1,4 +1,4 @@
-# Публичные URL для ссылок (Jira mock). Канон — platform (остальные имена тоже обслуживаются Ingress).
+# Публичные URL для ссылок (Jira mock). Канон Jira: отдельный хост jira.atomic-asoc.ru (Ingress → jira-mock).
 # После правки: kubectl apply -f deploy/k8s/public-urls.yaml -n asoc && kubectl -n asoc rollout restart deployment/jira-mock
 apiVersion: v1
 kind: ConfigMap
@@ -7,4 +7,4 @@ metadata:
   namespace: asoc
 data:
   public-origin: "https://atomic-asoc.ru"
-  jira-public-base-url: "https://atomic-asoc.ru/jira"
+  jira-public-base-url: "https://jira.atomic-asoc.ru"

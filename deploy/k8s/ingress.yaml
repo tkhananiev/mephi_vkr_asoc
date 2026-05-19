@@ -6,7 +6,8 @@
 # api-service, auth-service, reference-data-service, processing-service, jira-integration — см. mephi_vkr_asoc_front/nginx/default.conf).
 # Явные пути ниже — для читаемости манифеста (Prefix / тоже покрыл бы /api; порядок: более длинные префиксы).
 #
-# Jira mock: отдельный Ingress asoc-jira — префикс /jira + rewrite.
+# Jira mock: (1) префикс /jira/ на основном домене → asoc-web → nginx → jira-mock;
+# (2) отдельный FQDN jira.atomic-asoc.ru → напрямую jira-mock:8090 (после A-записи и выпуска сертификата).
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
@@ -27,6 +28,7 @@ spec:
         - atomic-asoc.ru
         - www.atomic-asoc.ru
         - platform.atomic-asoc.ru
+        - jira.atomic-asoc.ru
       secretName: asoc-tls
   rules:
     - host: atomic-asoc.ru
@@ -54,6 +56,13 @@ spec:
                 port:
                   number: 80
           - path: /swagger
+            pathType: Prefix
+            backend:
+              service:
+                name: asoc-web
+                port:
+                  number: 80
+          - path: /jira
             pathType: Prefix
             backend:
               service:
@@ -105,6 +114,13 @@ spec:
                 name: asoc-web
                 port:
                   number: 80
+          - path: /jira
+            pathType: Prefix
+            backend:
+              service:
+                name: asoc-web
+                port:
+                  number: 80
           - path: /health
             pathType: Prefix
             backend:
@@ -150,6 +166,13 @@ spec:
                 name: asoc-web
                 port:
                   number: 80
+          - path: /jira
+            pathType: Prefix
+            backend:
+              service:
+                name: asoc-web
+                port:
+                  number: 80
           - path: /health
             pathType: Prefix
             backend:
@@ -164,6 +187,16 @@ spec:
                 name: asoc-web
                 port:
                   number: 80
+    - host: jira.atomic-asoc.ru
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: jira-mock
+                port:
+                  number: 8090
     # По IP или при Host без DNS: правила без host — иначе трафик на 45.80.129.36 не матчился бы rules выше (кластер принимает SNI/host иной).
     - http:
         paths:
@@ -195,6 +228,13 @@ spec:
                 name: asoc-web
                 port:
                   number: 80
+          - path: /jira
+            pathType: Prefix
+            backend:
+              service:
+                name: asoc-web
+                port:
+                  number: 80
           - path: /health
             pathType: Prefix
             backend:
@@ -209,61 +249,3 @@ spec:
                 name: asoc-web
                 port:
                   number: 80
----
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: asoc-jira
-  namespace: asoc
-  annotations:
-    nginx.ingress.kubernetes.io/use-regex: "true"
-    nginx.ingress.kubernetes.io/rewrite-target: /$2
-    nginx.ingress.kubernetes.io/server-alias: "45.80.129.36"
-spec:
-  ingressClassName: nginx
-  tls:
-    - hosts:
-        - atomic-asoc.ru
-        - www.atomic-asoc.ru
-        - platform.atomic-asoc.ru
-      secretName: asoc-tls
-  rules:
-    - host: atomic-asoc.ru
-      http:
-        paths:
-          - path: /jira(/|$)(.*)
-            pathType: ImplementationSpecific
-            backend:
-              service:
-                name: jira-mock
-                port:
-                  number: 8090
-    - host: www.atomic-asoc.ru
-      http:
-        paths:
-          - path: /jira(/|$)(.*)
-            pathType: ImplementationSpecific
-            backend:
-              service:
-                name: jira-mock
-                port:
-                  number: 8090
-    - host: platform.atomic-asoc.ru
-      http:
-        paths:
-          - path: /jira(/|$)(.*)
-            pathType: ImplementationSpecific
-            backend:
-              service:
-                name: jira-mock
-                port:
-                  number: 8090
-    - http:
-        paths:
-          - path: /jira(/|$)(.*)
-            pathType: ImplementationSpecific
-            backend:
-              service:
-                name: jira-mock
-                port:
-                  number: 8090

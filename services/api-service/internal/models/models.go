@@ -1,5 +1,7 @@
 package models
 
+import "encoding/json"
+
 type ScanRequest struct {
 	TargetPath       string `json:"target_path"`
 	ScannerName      string `json:"scanner_name"`
@@ -7,6 +9,8 @@ type ScanRequest struct {
 	GitRepositoryURL string `json:"git_repository_url,omitempty"`
 	// GitRepositoryRef — ветка или тег после clone (необязательно: ветка по умолчанию у удалённого репозитория).
 	GitRepositoryRef string `json:"git_repository_ref,omitempty"`
+	// ConsoleProductID — привязка прогона к core.console_products (только с JWT владельца).
+	ConsoleProductID *int64 `json:"console_product_id,omitempty"`
 }
 
 // UnifiedScanRequest — тело POST /api/v1/scans (один вход для всех сканеров).
@@ -18,6 +22,7 @@ type UnifiedScanRequest struct {
 	SemgrepConfig    string `json:"semgrep_config,omitempty"`
 	GitRepositoryURL string `json:"git_repository_url,omitempty"`
 	GitRepositoryRef string `json:"git_repository_ref,omitempty"`
+	ConsoleProductID *int64 `json:"console_product_id,omitempty"`
 	// Options — необязательные параметры сканера (Semgrep их пока не читает; зарезервировано под расширения).
 	Options map[string]any `json:"options,omitempty"`
 }
@@ -30,6 +35,7 @@ func (u UnifiedScanRequest) ToScanRequest() ScanRequest {
 		SemgrepConfig:    u.SemgrepConfig,
 		GitRepositoryURL: u.GitRepositoryURL,
 		GitRepositoryRef: u.GitRepositoryRef,
+		ConsoleProductID: u.ConsoleProductID,
 	}
 }
 
@@ -46,12 +52,9 @@ type SemgrepFinding struct {
 	CheckID string `json:"check_id"`
 	Path    string `json:"path"`
 	Extra   struct {
-		Message  string `json:"message"`
-		Severity string `json:"severity"`
-		Metadata struct {
-			CWE []string `json:"cwe"`
-			CVE string   `json:"cve"`
-		} `json:"metadata"`
+		Message  string          `json:"message"`
+		Severity string          `json:"severity"`
+		Metadata json.RawMessage `json:"metadata"`
 	} `json:"extra"`
 }
 
@@ -71,6 +74,10 @@ type ProcessingIngestRequest struct {
 	Findings    []ProcessingFindingItem `json:"findings"`
 	// OwnerUserID выставляет api-service для JWT пользователя консоли (authn.console_users.id).
 	OwnerUserID *int64 `json:"owner_user_id,omitempty"`
+	// ConsoleProductID — core.console_products.id; только с JWT пользователя, владельца продукта проверяем здесь.
+	ConsoleProductID *int64 `json:"console_product_id,omitempty"`
+	// Channel: «manual» (сценарии POST /api/v1/scans) или «ci» (ingest из пайплайна). Пустое на публичном ingest — по умолчанию ci.
+	Channel string `json:"channel,omitempty"`
 }
 
 type ProcessingFindingItem struct {

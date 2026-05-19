@@ -81,3 +81,9 @@ curl -X POST "http://localhost:8080/api/v1/scans" \
   -H "Content-Type: application/json" \
   -d '{"scanner_id":"semgrep","scanner_name":"semgrep"}'
 ```
+
+---
+
+## 3. GitLab CI + Runner (Semgrep / Gitleaks на WebGoat)
+
+Пример пайплайна GitLab CI (Semgrep / Gitleaks по репозиторию → ASOC, runner в Kubernetes): **`demo/gitlab-ci-webgoat/README.md`**, файлы **`demo/gitlab-ci-webgoat/.gitlab-ci.yml`** и **`demo/gitlab-ci-webgoat/ci/`**.

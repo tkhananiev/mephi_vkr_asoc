@@ -3,11 +3,12 @@ package httpapi
 import (
 	"context"
 	"encoding/json"
+	"log"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
-	"mephi_vkr_asoc/services/reference-data-service/internal/models"
 	"mephi_vkr_asoc/services/reference-data-service/internal/service"
 )
 
@@ -71,14 +72,14 @@ func (h *Handler) handleSyncBDUBulk(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
 		return
 	}
-	ctx, cancel := longRunningSyncContext()
-	defer cancel()
-	result, err := h.syncService.SyncBDUBulk(ctx)
-	if err != nil {
-		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+	if err := h.syncService.SyncBDUBulkAsync(); err != nil {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
 		return
 	}
-	writeJSON(w, http.StatusAccepted, result)
+	writeJSON(w, http.StatusAccepted, map[string]string{
+		"status": "accepted",
+		"hint":   "poll GET /api/v1/sync/status — блок «Сейчас в работе» и счётчики items_* обновляются в процессе",
+	})
 }
 
 func (h *Handler) handleSyncNVD(w http.ResponseWriter, r *http.Request) {
@@ -88,25 +89,30 @@ func (h *Handler) handleSyncNVD(w http.ResponseWriter, r *http.Request) {
 	}
 
 	cveID := r.URL.Query().Get("cve_id")
-	var (
-		result models.SyncResult
-		err    error
-	)
 	if cveID != "" {
-		result, err = h.syncService.SyncNVDByCVE(r.Context(), cveID)
-	} else {
-		if r.URL.Query().Get("full") == "1" {
-			_ = h.syncService.ResetNVDCursor(r.Context())
+		result, err := h.syncService.SyncNVDByCVE(r.Context(), cveID)
+		if err != nil {
+			status := http.StatusBadGateway
+			if strings.Contains(err.Error(), "занят") {
+				status = http.StatusConflict
+			}
+			writeJSON(w, status, map[string]string{"error": err.Error()})
+			return
 		}
-		ctx, cancel := longRunningSyncContext()
-		defer cancel()
-		result, err = h.syncService.SyncNVD(ctx)
-	}
-	if err != nil {
-		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+		writeJSON(w, http.StatusAccepted, result)
 		return
 	}
-	writeJSON(w, http.StatusAccepted, result)
+	if r.URL.Query().Get("full") == "1" {
+		_ = h.syncService.ResetNVDCursor(r.Context())
+	}
+	if err := h.syncService.SyncNVDAsync(); err != nil {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusAccepted, map[string]string{
+		"status": "accepted",
+		"hint":   "poll GET /api/v1/sync/status — счётчики прогресса для NVD пишутся в audit.reference_sync_runs во время загрузки страниц",
+	})
 }
 
 func (h *Handler) handleSyncAll(w http.ResponseWriter, r *http.Request) {
@@ -115,27 +121,22 @@ func (h *Handler) handleSyncAll(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	type payload struct {
-		BDU models.SyncResult `json:"bdu"`
-		NVD models.SyncResult `json:"nvd"`
-	}
+	go func() {
+		ctx, cancel := longRunningSyncContext()
+		defer cancel()
+		bduResult, bduErr := h.syncService.SyncBDU(ctx)
+		nvdResult, nvdErr := h.syncService.SyncNVD(ctx)
+		if bduErr != nil || nvdErr != nil {
+			log.Printf("sync/all background: bdu_err=%v nvd_err=%v", bduErr, nvdErr)
+		}
+		_ = bduResult
+		_ = nvdResult
+	}()
 
-	ctx, cancel := longRunningSyncContext()
-	defer cancel()
-
-	bduResult, bduErr := h.syncService.SyncBDU(ctx)
-	nvdResult, nvdErr := h.syncService.SyncNVD(ctx)
-	if bduErr != nil || nvdErr != nil {
-		writeJSON(w, http.StatusBadGateway, map[string]any{
-			"bdu_error": errString(bduErr),
-			"nvd_error": errString(nvdErr),
-			"bdu":       bduResult,
-			"nvd":       nvdResult,
-		})
-		return
-	}
-
-	writeJSON(w, http.StatusAccepted, payload{BDU: bduResult, NVD: nvdResult})
+	writeJSON(w, http.StatusAccepted, map[string]string{
+		"status": "accepted",
+		"hint":   "БДУ RSS затем NVD выполняются в фоне; смотрите GET /api/v1/sync/status",
+	})
 }
 
 func (h *Handler) handleListRuns(w http.ResponseWriter, r *http.Request) {
@@ -162,11 +163,4 @@ func writeJSON(w http.ResponseWriter, status int, payload any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(payload)
-}
-
-func errString(err error) string {
-	if err == nil {
-		return ""
-	}
-	return err.Error()
 }

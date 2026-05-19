@@ -78,6 +78,11 @@ func (o *Orchestrator) RunSemgrepScenario(ctx context.Context, request models.Sc
 	return o.RunScan(ctx, "semgrep", request, ownerUserID)
 }
 
+// RunGitleaksScenario — совместимость с POST /api/v1/scans/gitleaks; предпочтительнее POST /api/v1/scans.
+func (o *Orchestrator) RunGitleaksScenario(ctx context.Context, request models.ScanRequest, ownerUserID int64) (models.PassportResponse, error) {
+	return o.RunScan(ctx, "gitleaks", request, ownerUserID)
+}
+
 func (o *Orchestrator) runSemgrepScenario(ctx context.Context, request models.ScanRequest, ownerUserID int64) (models.PassportResponse, error) {
 	scanResult, err := o.callSemgrepService(ctx, request)
 	if err != nil {
@@ -88,42 +93,19 @@ func (o *Orchestrator) runSemgrepScenario(ctx context.Context, request models.Sc
 	return o.passportAfterFindings(ctx, request, findings, ownerUserID)
 }
 
-func findingsFromSemgrepResult(sr models.SemgrepResult) []models.ProcessingFindingItem {
-	findings := make([]models.ProcessingFindingItem, 0, len(sr.Results))
-	for _, result := range sr.Results {
-		cwe := ""
-		if len(result.Extra.Metadata.CWE) > 0 {
-			cwe = result.Extra.Metadata.CWE[0]
-		}
-
-		findings = append(findings, models.ProcessingFindingItem{
-			AssetID:    filepath.Base(result.Path),
-			Identifier: result.CheckID,
-			Severity:   normalizeSeverity(result.Extra.Severity),
-			Component:  result.Path,
-			Version:    "",
-			CVE:        strings.TrimSpace(result.Extra.Metadata.CVE),
-			CWE:        cwe,
-			Metadata: map[string]any{
-				"message": result.Extra.Message,
-				"path":    result.Path,
-			},
-			RawPayload: map[string]any{
-				"check_id": result.CheckID,
-			},
-		})
-	}
-	return findings
-}
-
 func (o *Orchestrator) passportAfterFindings(ctx context.Context, request models.ScanRequest, findings []models.ProcessingFindingItem, ownerUserID int64) (models.PassportResponse, error) {
 	ingest := models.ProcessingIngestRequest{
 		ScannerName: request.ScannerName,
 		Findings:    findings,
+		Channel:     "manual",
 	}
 	if ownerUserID > 0 {
 		id := ownerUserID
 		ingest.OwnerUserID = &id
+	}
+	if request.ConsoleProductID != nil && *request.ConsoleProductID > 0 {
+		cid := *request.ConsoleProductID
+		ingest.ConsoleProductID = &cid
 	}
 	processingResponse, err := o.IngestFindings(ctx, ingest)
 	if err != nil {

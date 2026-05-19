@@ -3,8 +3,8 @@ info:
   title: ASOC Public API (api-service)
   description: |
     **api-service.** `POST /api/v1/scans` — единый вход: в теле задаётся **`scanner_id`** (`semgrep`, `gitleaks`, …), далее тот же сценарий (сканирование, ingest находок, группы, тикеты).
-    `POST /api/v1/scans/semgrep` оставлен для совместимости (тело как у прежнего Semgrep — без поля `scanner_id`).
-    **`POST /api/v1/findings/ingest`** — приём **уже нормализованных** находок в формате ниже (CI, сторонний сканер); поле `owner_user_id` в теле **не используется**, владелец берётся только из JWT пользователя консоли при наличии. С внешнего контура авторизуйте запрос тем же **`X-API-Key` / Bearer API-ключа** или JWT (см. `APP_AUTH_API_KEY`).
+    `POST /api/v1/scans/semgrep` и `POST /api/v1/scans/gitleaks` оставлены для совместимости (тело как при соответствующем сканере — без поля `scanner_id`).
+    **`POST /api/v1/findings/ingest`** — приём **уже нормализованных** находок в формате ниже (CI, сторонний сканер); поле `owner_user_id` в теле **не используется**, владелец берётся только из JWT пользователя консоли при наличии. Поле **`console_product_id`** (опционально) привязывает прогон к записи **`GET /api/v1/console/products`** того же пользователя; без JWT отбрасывается. Отчёт и группы по одному проекту — **`GET /api/v1/report/vulnerabilities?console_product_id=…`** и **`GET /api/v1/groups?console_product_id=…`** (нужен JWT пользователя, не только API-ключ). С внешнего контура авторизуйте запрос тем же **`X-API-Key` / Bearer API-ключа** или JWT (см. `APP_AUTH_API_KEY`).
     `GET /api/v1/integrations` — публичный каталог сканеров (без секретов): метаданные, флаг доступности для консоли.
     Способ передачи находок и настройки среды — в `docs/ENVIRONMENT.md` и `docs/ARCHITECTURE.md`.
   version: "1.0"
@@ -109,6 +109,7 @@ paths:
       description: >
         Отправка пакета в тот же контракт, что internal `processing-service`; маршрутизация через api-service (Kafka или HTTP по ENV).
         Пустой массив `findings` допустим — создаётся run без строк.
+        Поле `channel` (manual/ci): если не указано — подставляется **ci** (ожидаемый сценарий из CI/CD).
       operationId: ingestFindingsPublic
       requestBody:
         required: true
@@ -171,6 +172,35 @@ paths:
       deprecated: true
       summary: Полный сценарий сканирования Semgrep (устарело — используйте POST /api/v1/scans и scanner_id)
       operationId: scanSemgrepLegacy
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ScanRequest"
+      responses:
+        "202":
+          description: Паспорт сценария
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PassportResponse"
+        "400":
+          description: Неверное тело
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        "502":
+          description: Ошибка downstream
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+  /api/v1/scans/gitleaks:
+    post:
+      summary: Полный сценарий сканирования Gitleaks (без scanner_id в теле)
+      operationId: scanGitleaksCompat
       requestBody:
         required: true
         content:
@@ -282,11 +312,6 @@ components:
           description: Пример или шаблон тела POST для вызова сканера.
         invoke_hint:
           type: string
-      type: object
-      properties:
-        status:
-          type: string
-          example: ok
     ErrorBody:
       type: object
       properties:
@@ -342,6 +367,20 @@ components:
           format: int64
           deprecated: true
           description: Игнорируется; владелец задаётся только JWT консоли на api-service.
+        channel:
+          type: string
+          enum: [manual, ci]
+          description: >
+            Канал прогона. Если не указано, для POST /api/v1/findings/ingest подставляется «ci» (типичный сценарий пайплайна).
+            Ручные сканы через POST /api/v1/scans всегда фиксируются как «manual» на стороне сервера.
+          example: ci
+        console_product_id:
+          type: integer
+          format: int64
+          description: >
+            Опционально: id строки из GET /api/v1/console/products (продукт того же пользователя JWT).
+            Прогон сохраняется с привязкой к проекту; GET /api/v1/groups и GET /api/v1/report/vulnerabilities с query-параметром
+            console_product_id возвращают только данные прогонов этого продукта. С одним API-ключом без JWT поле отбрасывается.
     UnifiedScanRequest:
       allOf:
         - type: object

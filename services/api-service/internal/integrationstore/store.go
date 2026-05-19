@@ -69,7 +69,7 @@ var builtinCatalog = []Item{
 		Enabled:      true,
 		InputKind:    "filesystem",
 		ScannerName:  "gitleaks",
-		APIScanPath:  "/api/v1/scans",
+		APIScanPath:  "/api/v1/scans/gitleaks",
 		ConsolePath:  "/app/scan/gitleaks",
 		Capabilities: []string{"secrets", "filesystem_target"},
 	},

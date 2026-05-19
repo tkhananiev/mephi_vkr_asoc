@@ -35,10 +35,27 @@ func New(publicIssueBase string) *Handler {
 }
 
 func (h *Handler) Register(mux *http.ServeMux) {
+	mux.HandleFunc("/", h.handleRoot)
 	mux.HandleFunc("/health", h.handleHealth)
 	mux.HandleFunc("/console", h.handleConsole)
 	mux.HandleFunc("/browse/", h.handleBrowse)
 	mux.HandleFunc("/rest/api/2/issue", h.handleCreateIssue)
+}
+
+func (h *Handler) handleRoot(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path != "/" {
+		http.NotFound(w, r)
+		return
+	}
+	switch r.Method {
+	case http.MethodGet:
+		http.Redirect(w, r, "/console", http.StatusFound)
+	case http.MethodHead:
+		w.Header().Set("Location", "/console")
+		w.WriteHeader(http.StatusFound)
+	default:
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+	}
 }
 
 func (h *Handler) handleHealth(w http.ResponseWriter, _ *http.Request) {

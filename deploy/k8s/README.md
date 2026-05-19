@@ -60,7 +60,7 @@ kubectl apply -f deploy/k8s/secret.yaml && kubectl kustomize deploy/k8s --load-r
 | **PVC `bdu-catalog-import`** | **`bdu-catalog-pvc.yaml`** — том **`/bdu-import`** под **`vulxml.xml`** и **`vullist.xlsx`**; загрузка и Job — см. § **«БДУ: полный дамп только в Kubernetes»** ниже |
 | Service + Deployment | `reference-data-service`, `processing-service`, `semgrep-service`, `api-service`, `jira-integration-service`, `jira-mock` |
 | Service + Deployment | `asoc-web` (фронт) |
-| Ingress (×2) | `asoc-app` (`/` → asoc-web), `asoc-jira` (`/jira` → jira-mock + rewrite) |
+| Ingress | `asoc-app`: основной домен (`/`, `/api`, `/jira` → **asoc-web**); **`jira.atomic-asoc.ru`** → **jira-mock:8090** |
 
 **Образы** везде вида `asoc/<сервис>:latest` — собери локально или залей в registry и поменяй `image` / `imagePullSecrets`.
 
@@ -251,7 +251,8 @@ curl -sS -X POST http://127.0.0.1:8080/api/v1/scans \
 
 3. **Два Ingress** в `ingress.yaml`:
    - **`asoc-app`**: правило **без `host`** → `http://<IP>/` попадает в **asoc-web** (UI + прокси API).
-   - **`asoc-jira`**: префикс **`/jira`** → **jira-mock**, с **rewrite** (внутри сервиса пути как у обычного Jira: `/browse/...`).
+   - Второй вход к моку: хост **`jira.atomic-asoc.ru`** на том же Ingress (TLS общий секрет **`asoc-tls`**) — нужны **A-запись** и включение имени в сертификат (перевыпуск cert-manager после `apply`).
+   - **`/jira/`** на основном домене остаётся: **asoc-web** → **jira-mock**.
 
 4. **Повесь внешний IP на Ingress** (зависит от кластера):
    - **LoadBalancer** у сервиса контроллера: в панели Selectel / Magnum укажи **зарезервированный** IP (например тот, что на `router`) для этого LB **или** создай LB с `loadBalancerIP` (если облако поддерживает).

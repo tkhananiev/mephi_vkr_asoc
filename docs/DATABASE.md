@@ -74,6 +74,7 @@
 | `groups_updated` | В коде инкрементируется на каждую обработанную находку (не «число уникальных групп»). |
 | `error_message` | Текст ошибки при `failed`. |
 | **`owner_user_id`** | _(миграция `014`.)_ Привязка прогона к **`authn.console_users.id`**; `NULL` — прогон без владельца (API-ключ, прямой HTTP-ingest без пользователя). Используется для фильтров отчёта и групп по консольному пользователю. |
+| **`console_product_id`** | _(миграция `017`.)_ FK → **`core.console_products.id`**; какому **проекту консоли** принадлежит прогон. Фильтр **`?console_product_id=`** на **`GET /api/v1/groups`** и **`GET /api/v1/report/vulnerabilities`** (через api-service с JWT пользователя). |
 
 **Пишет / читает:** `processing-service`.
 
@@ -212,5 +213,4 @@ FROM integration.ticket_links ORDER BY id;
 | `005_demo_cwe_alias.sql` | Доп. алиас CWE для демо. |
 | `006` … `013` | См. каталог `migrations/` и `deploy/k8s/kustomization.yaml` (синк курсоров, `authn`, отложенная регистрация, демо-алиасы и т.д.). |
 | **`014_console_products_and_run_owner.sql`** | `core.console_products`, колонка **`core.processing_runs.owner_user_id`**. |
-
-Краткая карта сервисов ↔ таблицы: [`docs/SERVICES_AND_DATA.md`](SERVICES_AND_DATA.md).
+| **`017_processing_run_console_product.sql`** | Колонка **`core.processing_runs.console_product_id`** → `core.console_products`. | [`docs/SERVICES_AND_DATA.md`](SERVICES_AND_DATA.md).

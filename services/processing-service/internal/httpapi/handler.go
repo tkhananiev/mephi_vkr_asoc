@@ -3,8 +3,10 @@ package httpapi
 import (
 	"encoding/json"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
+	"time"
 
 	"mephi_vkr_asoc/services/processing-service/internal/models"
 	"mephi_vkr_asoc/services/processing-service/internal/service"
@@ -71,7 +73,18 @@ func (h *Handler) handleGroups(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	groups, err := h.processingService.ListGroups(r.Context(), limit, parseOwnerHeader(r))
+	cp, cpErr := parseConsoleProductFilter(r)
+	if cpErr != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": *cpErr})
+		return
+	}
+	owner := parseOwnerHeader(r)
+	if cp != nil && owner == nil {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "console_product_id requires X-ASOC-Console-User-ID"})
+		return
+	}
+
+	groups, err := h.processingService.ListGroups(r.Context(), limit, owner, cp)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
@@ -92,7 +105,18 @@ func (h *Handler) handleReportVulnerabilities(w http.ResponseWriter, r *http.Req
 		}
 	}
 
-	rows, err := h.processingService.ListVulnerabilityReport(r.Context(), limit, parseOwnerHeader(r))
+	cp, cpErr := parseConsoleProductFilter(r)
+	if cpErr != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": *cpErr})
+		return
+	}
+	owner := parseOwnerHeader(r)
+	if cp != nil && owner == nil {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "console_product_id requires X-ASOC-Console-User-ID"})
+		return
+	}
+
+	rows, err := h.processingService.ListVulnerabilityReport(r.Context(), limit, owner, cp, parseReportFilter(r.URL.Query()))
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
@@ -123,4 +147,115 @@ func parseOwnerHeader(r *http.Request) *int64 {
 		return nil
 	}
 	return &id
+}
+
+func parseConsoleProductFilter(r *http.Request) (*int64, *string) {
+	raw := strings.TrimSpace(r.URL.Query().Get("console_product_id"))
+	if raw == "" {
+		return nil, nil
+	}
+	id, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil || id <= 0 {
+		msg := "invalid console_product_id"
+		return nil, &msg
+	}
+	return &id, nil
+}
+
+func parseQueryInt64(v url.Values, key string) *int64 {
+	raw := strings.TrimSpace(v.Get(key))
+	if raw == "" {
+		return nil
+	}
+	id, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil || id <= 0 {
+		return nil
+	}
+	return &id
+}
+
+func parseReportTimeFilter(v url.Values, key string, endOfDayInclusive bool) *time.Time {
+	raw := strings.TrimSpace(v.Get(key))
+	if raw == "" {
+		return nil
+	}
+	layouts := []string{time.RFC3339, "2006-01-02T15:04:05", "2006-01-02"}
+	var parsed time.Time
+	var usedLayout string
+	for _, ly := range layouts {
+		t, parseErr := time.Parse(ly, raw)
+		if parseErr != nil {
+			continue
+		}
+		parsed = t
+		usedLayout = ly
+		break
+	}
+	if usedLayout == "" {
+		return nil
+	}
+	if usedLayout == "2006-01-02" {
+		if endOfDayInclusive {
+			parsed = time.Date(parsed.Year(), parsed.Month(), parsed.Day(), 23, 59, 59, 999_999_999, time.UTC)
+		} else {
+			parsed = time.Date(parsed.Year(), parsed.Month(), parsed.Day(), 0, 0, 0, 0, time.UTC)
+		}
+	}
+	u := parsed.UTC()
+	return &u
+}
+
+// parseReportFilter читает опциональные фильтры отчёта из query.
+func parseReportFilter(v url.Values) *models.VulnerabilityReportFilter {
+	get := func(key string) *string {
+		raw := strings.TrimSpace(v.Get(key))
+		if raw == "" {
+			return nil
+		}
+		return &raw
+	}
+	gk := get("group_key")
+	cve := get("cve")
+	bdu := get("bdu_id")
+	scn := get("scanner_name")
+	sev := get("severity")
+	cat := get("catalog_source")
+	rch := get("run_channel")
+	ap := get("asset_path")
+	ver := get("version")
+	cwe := get("cwe")
+	gid := parseQueryInt64(v, "group_id")
+	vid := parseQueryInt64(v, "vulnerability_id")
+	from := parseReportTimeFilter(v, "run_at_from", false)
+	to := parseReportTimeFilter(v, "run_at_to", true)
+	f := models.VulnerabilityReportFilter{
+		GroupKey:        gk,
+		CVE:             cve,
+		BDUID:           bdu,
+		ScannerName:     scn,
+		Severity:        sev,
+		CatalogSource:   cat,
+		RunChannel:      rch,
+		AssetPath:       ap,
+		Version:         ver,
+		CWE:             cwe,
+		GroupID:         gid,
+		VulnerabilityID: vid,
+		RunAtFrom:       from,
+		RunAtTo:         to,
+	}
+	if filterReportEmpty(&f) {
+		return nil
+	}
+	return &f
+}
+
+func filterReportEmpty(f *models.VulnerabilityReportFilter) bool {
+	if f == nil {
+		return true
+	}
+	return f.GroupKey == nil && f.CVE == nil && f.BDUID == nil && f.ScannerName == nil &&
+		f.Severity == nil && f.CatalogSource == nil && f.RunChannel == nil && f.AssetPath == nil &&
+		f.Version == nil && f.CWE == nil && f.GroupID == nil && f.VulnerabilityID == nil &&
+		f.RunAtFrom == nil && f.RunAtTo == nil
 }

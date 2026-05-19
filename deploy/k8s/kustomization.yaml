@@ -34,3 +34,6 @@ configMapGenerator:
       - ../../migrations/012_pending_registrations.sql
       - ../../migrations/013_demo_cwe89_alias.sql
       - ../../migrations/014_console_products_and_run_owner.sql
+      - ../../migrations/015_processing_run_channel.sql
+      - ../../migrations/016_console_product_branch_refs.sql
+      - ../../migrations/017_processing_run_console_product.sql

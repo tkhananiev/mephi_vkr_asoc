@@ -20,7 +20,7 @@ func New(repo repository.ProcessingRepository) *ProcessingService {
 
 func (s *ProcessingService) ProcessFindings(ctx context.Context, request models.IngestRequest) (models.ProcessingResult, error) {
 	owner := ingestOwner(request)
-	runID, err := s.repo.StartRun(ctx, request.ScannerName, len(request.Findings), owner)
+	runID, err := s.repo.StartRun(ctx, request.ScannerName, len(request.Findings), owner, normalizeRunChannel(request.Channel), request.ConsoleProductID)
 	if err != nil {
 		return models.ProcessingResult{}, err
 	}
@@ -30,7 +30,8 @@ func (s *ProcessingService) ProcessFindings(ctx context.Context, request models.
 		FindingsReceived: len(request.Findings),
 	}
 
-	for _, item := range request.Findings {
+	for _, raw := range request.Findings {
+		item := enrichFindingCatalogFields(raw)
 		refID, correlationStatus := s.resolveCatalogRef(ctx, item)
 
 		effectiveCVE := strings.TrimSpace(item.CVE)
@@ -80,6 +81,11 @@ func (s *ProcessingService) ProcessFindings(ctx context.Context, request models.
 		if inserted {
 			result.VulnerabilitiesCreated++
 		}
+		if err := s.repo.MergeVulnerabilityCatalog(ctx, vulnerabilityID, effectiveCVE, refID, correlationStatus); err != nil {
+			errMsg := err.Error()
+			_ = s.repo.FinishRun(ctx, runID, "failed", result, &errMsg)
+			return result, err
+		}
 
 		if err := s.repo.LinkFindingToVulnerability(ctx, findingID, vulnerabilityID); err != nil {
 			errMsg := err.Error()
@@ -116,12 +122,12 @@ func (s *ProcessingService) ProcessFindings(ctx context.Context, request models.
 	return result, nil
 }
 
-func (s *ProcessingService) ListGroups(ctx context.Context, limit int, ownerUserID *int64) ([]models.VulnerabilityGroup, error) {
-	return s.repo.ListGroups(ctx, limit, ownerUserID)
+func (s *ProcessingService) ListGroups(ctx context.Context, limit int, ownerUserID *int64, consoleProductID *int64) ([]models.VulnerabilityGroup, error) {
+	return s.repo.ListGroups(ctx, limit, ownerUserID, consoleProductID)
 }
 
-func (s *ProcessingService) ListVulnerabilityReport(ctx context.Context, limit int, ownerUserID *int64) ([]models.VulnerabilityReportRow, error) {
-	return s.repo.ListVulnerabilityReport(ctx, limit, ownerUserID)
+func (s *ProcessingService) ListVulnerabilityReport(ctx context.Context, limit int, ownerUserID *int64, consoleProductID *int64, filter *models.VulnerabilityReportFilter) ([]models.VulnerabilityReportRow, error) {
+	return s.repo.ListVulnerabilityReport(ctx, limit, ownerUserID, consoleProductID, filter)
 }
 
 func (s *ProcessingService) resolveCatalogRef(ctx context.Context, item models.FindingDTO) (refID *int64, correlationStatus string) {
@@ -177,6 +183,13 @@ func ingestOwner(request models.IngestRequest) *int64 {
 		return request.OwnerUserID
 	}
 	return nil
+}
+
+func normalizeRunChannel(raw string) string {
+	if strings.EqualFold(strings.TrimSpace(raw), "ci") {
+		return "ci"
+	}
+	return "manual"
 }
 
 func scopedGroupKey(owner *int64, baseKey string) string {

@@ -53,6 +53,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/health", h.handleHealth)
 	mux.HandleFunc("/api/v1/integrations", h.handleIntegrationsList)
 	mux.HandleFunc("/api/v1/admin/integrations", h.handleAdminIntegrations)
+	mux.HandleFunc("/api/v1/console/products/", h.handleConsoleProductByPath)
 	mux.HandleFunc("/api/v1/console/products", func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
@@ -68,6 +69,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/v1/findings/ingest", h.handlePublicFindingsIngest)
 	mux.HandleFunc("/api/v1/scans", h.handleUnifiedScan)
 	mux.HandleFunc("/api/v1/scans/semgrep", h.handleSemgrepScan)
+	mux.HandleFunc("/api/v1/scans/gitleaks", h.handleGitleaksScan)
 	mux.HandleFunc("/api/v1/admin/ops/docker/logs", h.handleDockerLogs)
 	mux.HandleFunc("/api/v1/admin/ops/docker/restart", h.handleDockerRestart)
 }
@@ -79,6 +81,8 @@ func (h *Handler) handleHealth(w http.ResponseWriter, _ *http.Request) {
 // handlePublicFindingsIngest — универсальный приём нормализованных находок (любой сканер/CI),
 // тот же JSON, что internal POST processing /api/v1/findings/ingest. Владелец выставляется только
 // из JWT пользователя консоли; поле owner_user_id в теле игнорируется (не доверяем клиенту).
+// Поле console_product_id допускается только с JWT пользователя и только если продукт принадлежит ему;
+// с одним API-ключом отбрасывается.
 func (h *Handler) handlePublicFindingsIngest(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
@@ -90,13 +94,38 @@ func (h *Handler) handlePublicFindingsIngest(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	payload.OwnerUserID = nil
-	if uid, ok := ConsoleUserFromRequest(r); ok {
+	payload.ConsoleProductID = normalizeConsoleProductID(payload.ConsoleProductID)
+
+	uid, jwtOK := ConsoleUserFromRequest(r)
+	if jwtOK {
 		id := uid
 		payload.OwnerUserID = &id
+	} else {
+		payload.ConsoleProductID = nil
 	}
+
+	if payload.ConsoleProductID != nil {
+		if h.productStore == nil {
+			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "products store unavailable (set APP_POSTGRES_DSN)"})
+			return
+		}
+		owned, err := h.productStore.ProductOwnedBy(r.Context(), *payload.ConsoleProductID, uid)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		if !owned {
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": "console_product_id not found or forbidden"})
+			return
+		}
+	}
+
 	if strings.TrimSpace(payload.ScannerName) == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "scanner_name required"})
 		return
+	}
+	if strings.TrimSpace(payload.Channel) == "" {
+		payload.Channel = "ci"
 	}
 	res, err := h.orchestrator.IngestFindings(r.Context(), payload)
 	if err != nil {
@@ -104,6 +133,39 @@ func (h *Handler) handlePublicFindingsIngest(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	writeJSON(w, http.StatusAccepted, res)
+}
+
+func normalizeConsoleProductID(p *int64) *int64 {
+	if p == nil || *p <= 0 {
+		return nil
+	}
+	return p
+}
+
+// assertConsoleProductAccess — если pid задан, нужен JWT пользователя консоли и владение продуктом.
+func (h *Handler) assertConsoleProductAccess(w http.ResponseWriter, r *http.Request, pid *int64) bool {
+	if pid == nil {
+		return true
+	}
+	uid, jwtOK := ConsoleUserFromRequest(r)
+	if !jwtOK {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "console_product_id requires console user JWT"})
+		return false
+	}
+	if h.productStore == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "products store unavailable (set APP_POSTGRES_DSN)"})
+		return false
+	}
+	ok, err := h.productStore.ProductOwnedBy(r.Context(), *pid, uid)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return false
+	}
+	if !ok {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "console_product_id not found or forbidden"})
+		return false
+	}
+	return true
 }
 
 func (h *Handler) handleUnifiedScan(w http.ResponseWriter, r *http.Request) {
@@ -114,6 +176,10 @@ func (h *Handler) handleUnifiedScan(w http.ResponseWriter, r *http.Request) {
 	var u models.UnifiedScanRequest
 	if err := json.NewDecoder(r.Body).Decode(&u); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json body"})
+		return
+	}
+	u.ConsoleProductID = normalizeConsoleProductID(u.ConsoleProductID)
+	if !h.assertConsoleProductAccess(w, r, u.ConsoleProductID) {
 		return
 	}
 	sid := strings.TrimSpace(u.ScannerID)
@@ -205,6 +271,10 @@ func (h *Handler) handleSemgrepScan(w http.ResponseWriter, r *http.Request) {
 	if request.ScannerName == "" {
 		request.ScannerName = "semgrep"
 	}
+	request.ConsoleProductID = normalizeConsoleProductID(request.ConsoleProductID)
+	if !h.assertConsoleProductAccess(w, r, request.ConsoleProductID) {
+		return
+	}
 	if err := h.prepareScannerTarget("semgrep", &request); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
@@ -216,6 +286,43 @@ func (h *Handler) handleSemgrepScan(w http.ResponseWriter, r *http.Request) {
 	}
 
 	passport, err := h.orchestrator.RunScan(r.Context(), "semgrep", request, owner)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+		return
+	}
+
+	writeJSON(w, http.StatusAccepted, passport)
+}
+
+func (h *Handler) handleGitleaksScan(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		return
+	}
+
+	var request models.ScanRequest
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json body"})
+		return
+	}
+	if request.ScannerName == "" {
+		request.ScannerName = "gitleaks"
+	}
+	request.ConsoleProductID = normalizeConsoleProductID(request.ConsoleProductID)
+	if !h.assertConsoleProductAccess(w, r, request.ConsoleProductID) {
+		return
+	}
+	if err := h.prepareScannerTarget("gitleaks", &request); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+
+	var owner int64
+	if uid, ok := ConsoleUserFromRequest(r); ok {
+		owner = uid
+	}
+
+	passport, err := h.orchestrator.RunGitleaksScenario(r.Context(), request, owner)
 	if err != nil {
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
 		return

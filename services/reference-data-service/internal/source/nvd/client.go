@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 	"time"
 
@@ -20,6 +21,9 @@ const (
 	throttleNoAPIKey   = 6 * time.Second
 	throttleWithAPIKey = 650 * time.Millisecond
 )
+
+// Из поля weaknesses.description (текст вида "CWE-79 …").
+var nvdWeaknessCWEIDRe = regexp.MustCompile(`(?i)CWE-\d+`)
 
 type Client struct {
 	httpClient *http.Client
@@ -238,6 +242,35 @@ func (c *Client) doGET(ctx context.Context, url string) (*apiResponse, error) {
 	return &payload, nil
 }
 
+// cweAliasesFromNVDWeaknesses — уникальные идентификаторы CWE-NNN из блока weaknesses ответа NVD 2.0.
+func cweAliasesFromNVDWeaknesses(weaknesses []struct {
+	Description []struct {
+		Value string `json:"value"`
+	} `json:"description"`
+}) []string {
+	seen := make(map[string]struct{})
+	var out []string
+	for _, w := range weaknesses {
+		for _, d := range w.Description {
+			raw := strings.TrimSpace(d.Value)
+			if raw == "" {
+				continue
+			}
+			m := nvdWeaknessCWEIDRe.FindString(raw)
+			if m == "" {
+				continue
+			}
+			id := strings.ToUpper(m)
+			if _, ok := seen[id]; ok {
+				continue
+			}
+			seen[id] = struct{}{}
+			out = append(out, id)
+		}
+	}
+	return out
+}
+
 func (c *Client) recordsFromPayload(payload *apiResponse) ([]models.SourceRecord, error) {
 	records := make([]models.SourceRecord, 0, len(payload.Vulnerabilities))
 	for _, entry := range payload.Vulnerabilities {
@@ -259,6 +292,12 @@ func (c *Client) recordsFromPayload(payload *apiResponse) ([]models.SourceRecord
 			rawPayload = []byte("{}")
 		}
 
+		aliases := make([]models.ReferenceAlias, 0, 4+len(cve.Weaknesses))
+		aliases = append(aliases, models.ReferenceAlias{AliasType: "CVE", AliasValue: cve.ID})
+		for _, cwe := range cweAliasesFromNVDWeaknesses(cve.Weaknesses) {
+			aliases = append(aliases, models.ReferenceAlias{AliasType: "CWE", AliasValue: cwe})
+		}
+
 		records = append(records, models.SourceRecord{
 			ExternalID:  cve.ID,
 			Title:       cve.ID,
@@ -269,9 +308,7 @@ func (c *Client) recordsFromPayload(payload *apiResponse) ([]models.SourceRecord
 			SourceURL:   "https://nvd.nist.gov/vuln/detail/" + cve.ID,
 			Status:      cve.VulnStatus,
 			Metadata:    mustJSON(metadata),
-			Aliases: []models.ReferenceAlias{
-				{AliasType: "CVE", AliasValue: cve.ID},
-			},
+			Aliases:     aliases,
 			RawPayload:  string(rawPayload),
 			ContentType: "application/json",
 		})

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	stdsync "sync"
 	"time"
 
 	"mephi_vkr_asoc/services/reference-data-service/internal/kafka"
@@ -40,6 +41,9 @@ type SyncService struct {
 	bdu       SourceClient
 	nvd       NVDSourceClient
 	bduBulk   *bdu.BulkImporter
+
+	nvdGate     stdsync.Mutex // SyncNVD / фоновый HTTP не параллелятся
+	bduBulkGate stdsync.Mutex // полный импорт БДУ
 }
 
 func NewSyncService(
@@ -64,6 +68,12 @@ func (s *SyncService) SyncBDU(ctx context.Context) (models.SyncResult, error) {
 
 // SyncBDUBulk — полный импорт vulxml.zip + vullist.xlsx (ручной запуск; RSS остаётся для подгрузки новых).
 func (s *SyncService) SyncBDUBulk(ctx context.Context) (models.SyncResult, error) {
+	s.bduBulkGate.Lock()
+	defer s.bduBulkGate.Unlock()
+	return s.syncBDUBulkUnlocked(ctx)
+}
+
+func (s *SyncService) syncBDUBulkUnlocked(ctx context.Context) (models.SyncResult, error) {
 	if s.bduBulk == nil {
 		return models.SyncResult{}, fmt.Errorf("bdu bulk import is not configured (enable APP_BDU_BULK_ENABLED; set vulxml via APP_BDU_VULXML_ZIP_PATH or APP_BDU_VULXML_ZIP_URL — path may be .zip or .xml — and xlsx via APP_BDU_VULLIST_XLSX_PATH or APP_BDU_VULLIST_XLSX_URL)")
 	}
@@ -115,6 +125,22 @@ func (s *SyncService) SyncBDUBulk(ctx context.Context) (models.SyncResult, error
 	return result, nil
 }
 
+// SyncBDUBulkAsync запускает полный импорт БДУ в фоне; при занятости возвращает ошибку (HTTP 409).
+func (s *SyncService) SyncBDUBulkAsync() error {
+	if !s.bduBulkGate.TryLock() {
+		return fmt.Errorf("полный импорт БДУ уже выполняется")
+	}
+	go func() {
+		defer s.bduBulkGate.Unlock()
+		bgCtx, cancel := context.WithTimeout(context.Background(), 168*time.Hour)
+		defer cancel()
+		if _, err := s.syncBDUBulkUnlocked(bgCtx); err != nil {
+			log.Printf("SyncBDUBulk async: %v", err)
+		}
+	}()
+	return nil
+}
+
 // ResetNVDCursor сбрасывает курсор lastMod (следующий SyncNVD выполнит полную загрузку всех страниц).
 func (s *SyncService) ResetNVDCursor(ctx context.Context) error {
 	return s.repo.DeleteReferenceSyncCursor(ctx, nvdCursorSource)
@@ -126,12 +152,22 @@ func (s *SyncService) syncNVDPaged(ctx context.Context, paged NVDFullSync, runID
 		RunID:      runID,
 	}
 
+	pageSeq := 0
+	lastProgWrite := time.Time{}
 	onPage := func(page []models.SourceRecord) error {
 		d, p, ins, upd := s.applyRecords(ctx, "nvd", page, false)
 		result.ItemsDiscovered += d
 		result.ItemsProcessed += p
 		result.ItemsInserted += ins
 		result.ItemsUpdated += upd
+		pageSeq++
+		// Запись прогресса в audit.reference_sync_runs для опроса из консоли (без спама UPDATE на каждую страницу).
+		if pageSeq <= 8 || pageSeq%12 == 0 || time.Since(lastProgWrite) >= 4*time.Second {
+			lastProgWrite = time.Now()
+			if err := s.repo.UpdateSyncRunProgress(ctx, runID, result); err != nil {
+				return fmt.Errorf("nvd progress update: %w", err)
+			}
+		}
 		return nil
 	}
 
@@ -201,6 +237,28 @@ func (s *SyncService) syncNVDPaged(ctx context.Context, paged NVDFullSync, runID
 }
 
 func (s *SyncService) SyncNVD(ctx context.Context) (models.SyncResult, error) {
+	s.nvdGate.Lock()
+	defer s.nvdGate.Unlock()
+	return s.syncNVDUnlocked(ctx)
+}
+
+// SyncNVDAsync — то же, что SyncNVD, но в отдельной goroutine (HTTP сразу отвечает 202).
+func (s *SyncService) SyncNVDAsync() error {
+	if !s.nvdGate.TryLock() {
+		return fmt.Errorf("синхронизация NVD уже выполняется")
+	}
+	go func() {
+		defer s.nvdGate.Unlock()
+		bgCtx, cancel := context.WithTimeout(context.Background(), 168*time.Hour)
+		defer cancel()
+		if _, err := s.syncNVDUnlocked(bgCtx); err != nil {
+			log.Printf("SyncNVD async: %v", err)
+		}
+	}()
+	return nil
+}
+
+func (s *SyncService) syncNVDUnlocked(ctx context.Context) (models.SyncResult, error) {
 	paged, ok := s.nvd.(NVDFullSync)
 	if !ok {
 		return s.syncSource(ctx, "nvd", s.nvd)
@@ -228,6 +286,11 @@ func (s *SyncService) SyncNVD(ctx context.Context) (models.SyncResult, error) {
 }
 
 func (s *SyncService) SyncNVDByCVE(ctx context.Context, cveID string) (models.SyncResult, error) {
+	if !s.nvdGate.TryLock() {
+		return models.SyncResult{}, fmt.Errorf("NVD занят полной или инкрементальной синхронизацией; повторите после её завершения")
+	}
+	defer s.nvdGate.Unlock()
+
 	runID, err := s.repo.StartSyncRun(ctx, "nvd")
 	if err != nil {
 		return models.SyncResult{}, err

@@ -1,0 +1,13 @@
+# GitLab Runner в кластере (Helm). Токен не хранить здесь:
+#   helm upgrade --install asoc-ci-runner gitlab/gitlab-runner -n gitlab-runner \
+#     -f deploy/k8s/gitlab-runner-values.yaml --set runnerRegistrationToken="$GL_TOKEN"
+gitlabUrl: "https://gitlab.com/"
+
+rbac:
+  create: true
+
+runners:
+  config: |
+    [[runners]]
+      [runners.kubernetes]
+        image = "alpine:3.20"
