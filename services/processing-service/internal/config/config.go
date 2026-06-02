@@ -2,6 +2,7 @@ package config
 
 import (
 	"os"
+	"strconv"
 	"strings"
 )
 
@@ -9,8 +10,10 @@ type Config struct {
 	HTTPPort              string
 	PostgresDSN           string
 	KafkaBrokers          []string
-	KafkaTopicIngest      string
-	KafkaTopicResult      string
+	KafkaTopicIngest        string
+	KafkaTopicResult        string
+	KafkaIngestPartitions   int
+	KafkaResultPartitions   int
 	KafkaIngestEnabled    bool
 	HTTPFindingsIngestEnabled bool
 }
@@ -27,6 +30,8 @@ func Load() Config {
 		KafkaBrokers:              brokers,
 		KafkaTopicIngest:          getEnv("APP_KAFKA_TOPIC_FINDINGS_INGEST", "asoc.findings.ingest"),
 		KafkaTopicResult:          getEnv("APP_KAFKA_TOPIC_FINDINGS_RESULT", "asoc.findings.ingest.result"),
+		KafkaIngestPartitions:     getIntEnv("APP_KAFKA_INGEST_PARTITIONS", 6),
+		KafkaResultPartitions:     getIntEnv("APP_KAFKA_RESULT_PARTITIONS", 1),
 		KafkaIngestEnabled:        kafkaOn,
 		HTTPFindingsIngestEnabled: httpFindings,
 	}
@@ -42,6 +47,18 @@ func splitCSV(s string) []string {
 		}
 	}
 	return out
+}
+
+func getIntEnv(key string, fallback int) int {
+	v := strings.TrimSpace(os.Getenv(key))
+	if v == "" {
+		return fallback
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil || n < 1 {
+		return fallback
+	}
+	return n
 }
 
 func getEnv(key, fallback string) string {

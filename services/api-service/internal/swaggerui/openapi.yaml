@@ -3,16 +3,16 @@ info:
   title: ASOC Public API (api-service)
   description: |
     **api-service.** `POST /api/v1/scans` — единый вход: в теле задаётся **`scanner_id`** (`semgrep`, `gitleaks`, …), далее тот же сценарий (сканирование, ingest находок, группы, тикеты).
-    `POST /api/v1/scans/semgrep` и `POST /api/v1/scans/gitleaks` оставлены для совместимости (тело как при соответствующем сканере — без поля `scanner_id`).
+    `POST /api/v1/scans/semgrep`, `…/gitleaks`, `…/sca` (Trivy) и `…/dast` (OWASP ZAP) оставлены для совместимости (тело как при соответствующем сканере — без поля `scanner_id`).
     **`POST /api/v1/findings/ingest`** — приём **уже нормализованных** находок в формате ниже (CI, сторонний сканер); поле `owner_user_id` в теле **не используется**, владелец берётся только из JWT пользователя консоли при наличии. Поле **`console_product_id`** (опционально) привязывает прогон к записи **`GET /api/v1/console/products`** того же пользователя; без JWT отбрасывается. Отчёт и группы по одному проекту — **`GET /api/v1/report/vulnerabilities?console_product_id=…`** и **`GET /api/v1/groups?console_product_id=…`** (нужен JWT пользователя, не только API-ключ). С внешнего контура авторизуйте запрос тем же **`X-API-Key` / Bearer API-ключа** или JWT (см. `APP_AUTH_API_KEY`).
     `GET /api/v1/integrations` — публичный каталог сканеров (без секретов): метаданные, флаг доступности для консоли.
     Способ передачи находок и настройки среды — в `docs/ENVIRONMENT.md` и `docs/ARCHITECTURE.md`.
   version: "1.0"
 servers:
   - url: https://atomic-asoc.ru
-    description: Стенд (через Ingress / asoc-web)
+    description: Стенд (через публичный вход / asoc-web)
   - url: http://localhost:8080
-    description: Локально (docker-compose), прямой порт api-service
+    description: Локально на прямом порту api-service
 paths:
   /api/v1/integrations:
     get:
@@ -119,11 +119,13 @@ paths:
               $ref: "#/components/schemas/ProcessingIngestRequestPublic"
       responses:
         "202":
-          description: Результат прогона обработки
+          description: Пакет принят (Kafka); при брокере — status/correlation_id, без run_id
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ProcessingSummary"
+                oneOf:
+                  - $ref: "#/components/schemas/IngestAccepted"
+                  - $ref: "#/components/schemas/ProcessingSummary"
         "400":
           description: Неверное тело
           content:
@@ -172,6 +174,64 @@ paths:
       deprecated: true
       summary: Полный сценарий сканирования Semgrep (устарело — используйте POST /api/v1/scans и scanner_id)
       operationId: scanSemgrepLegacy
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ScanRequest"
+      responses:
+        "202":
+          description: Паспорт сценария
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PassportResponse"
+        "400":
+          description: Неверное тело
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        "502":
+          description: Ошибка downstream
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+  /api/v1/scans/sca:
+    post:
+      summary: Полный сценарий SCA (Trivy; без scanner_id в теле)
+      operationId: scanScaCompat
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ScanRequest"
+      responses:
+        "202":
+          description: Паспорт сценария
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PassportResponse"
+        "400":
+          description: Неверное тело
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        "502":
+          description: Ошибка downstream
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+  /api/v1/scans/dast:
+    post:
+      summary: Полный сценарий DAST (OWASP ZAP baseline; без scanner_id в теле)
+      operationId: scanDastCompat
       requestBody:
         required: true
         content:
@@ -280,7 +340,12 @@ components:
           type: boolean
         input_kind:
           type: string
-          description: filesystem, lockfile, http — вид входных данных сканера
+          description: filesystem, lockfile, http, oci_image, http_target, manifest_only
+        required_context:
+          type: array
+          items:
+            type: string
+          description: scm, base_url — что должно быть у продукта до запуска
         scanner_name:
           type: string
         api_scan_path:
@@ -390,7 +455,7 @@ components:
             scanner_id:
               type: string
               example: semgrep
-              description: Идентификатор исполнителя (`semgrep`, `gitleaks`, …).
+              description: Идентификатор исполнителя (`semgrep`, `gitleaks`, `trivy-sca`, `zap-dast`, …).
             options:
               type: object
               additionalProperties: true
@@ -422,10 +487,25 @@ components:
           description: >
             Без git_repository_url — абсолютный каталог исходников внутри контейнера semgrep-service.
             С git_repository_url — относительный подкаталог внутри клона (пустая строка — корень репозитория).
+        target_url:
+          type: string
+          example: https://example.com/app
+          description: Публичный HTTP(S) URL для DAST (zap-dast); localhost запрещён.
         semgrep_config:
           type: string
           example: p/java
           description: Путь к YAML правилам или набор Semgrep (p/java)
+    IngestAccepted:
+      type: object
+      properties:
+        status:
+          type: string
+          example: accepted
+        correlation_id:
+          type: string
+          format: uuid
+        findings_queued:
+          type: integer
     ProcessingSummary:
       type: object
       properties:

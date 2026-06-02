@@ -1,5 +1,5 @@
-# Том под полный дамп БДУ ФСТЭК для reference-data-service в Kubernetes (смонтирован в /bdu-import).
-# Сценарий целиком: deploy/k8s/README.md § «БДУ: полный дамп только в Kubernetes».
+# Том под полный дамп БДУ ФСТЭК для reference-data-service (монтирован в /bdu-import).
+# Сценарий целиком: deploy/k8s/README.md § «БДУ: полный дамп в назначенном окружении».
 #
 # После записи дампов запуск импорта: kubectl apply -f deploy/k8s/bdu-bulk-job.yaml
 #

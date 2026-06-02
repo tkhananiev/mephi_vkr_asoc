@@ -12,7 +12,7 @@ import (
 	"mephi_vkr_asoc/services/api-service/internal/models"
 )
 
-// IngestBridge публикует находки в Kafka и ждёт ответ в топике результатов (одна партиция).
+// IngestBridge публикует находки в Kafka; для сценариев сканирования — ожидание ответа в result-топике.
 type IngestBridge struct {
 	brokers     []string
 	ingestTopic string
@@ -26,7 +26,7 @@ func NewIngestBridge(brokers []string, ingestTopic, resultTopic string) *IngestB
 		Topic:        ingestTopic,
 		RequiredAcks: kafkago.RequireAll,
 		Async:        false,
-		Balancer:     &kafkago.LeastBytes{},
+		Balancer:     &kafkago.Hash{},
 	}
 	return &IngestBridge{
 		brokers:     brokers,
@@ -40,12 +40,19 @@ func (b *IngestBridge) Close() error {
 	return b.writer.Close()
 }
 
-// PublishAndWait отправляет ingest и блокируется до ответа processing или таймаута.
+// Publish ставит пакет в очередь ingest (без ожидания processing).
+func (b *IngestBridge) Publish(ctx context.Context, payload models.ProcessingIngestRequest) (string, error) {
+	corr := uuid.New().String()
+	if err := b.writeIngest(ctx, corr, payload); err != nil {
+		return "", err
+	}
+	return corr, nil
+}
+
+// PublishAndWait — для POST /api/v1/scans/* (нужен run_id в ответе).
 func (b *IngestBridge) PublishAndWait(ctx context.Context, payload models.ProcessingIngestRequest) (models.ProcessingResponse, error) {
 	corr := uuid.New().String()
-	env := IngestEnvelope{CorrelationID: corr, Ingest: payload}
-	body, err := json.Marshal(env)
-	if err != nil {
+	if err := b.writeIngest(ctx, corr, payload); err != nil {
 		return models.ProcessingResponse{}, err
 	}
 
@@ -58,13 +65,6 @@ func (b *IngestBridge) PublishAndWait(ctx context.Context, payload models.Proces
 		StartOffset: kafkago.LastOffset,
 	})
 	defer func() { _ = r.Close() }()
-
-	if err := b.writer.WriteMessages(ctx, kafkago.Message{
-		Key:   []byte(corr),
-		Value: body,
-	}); err != nil {
-		return models.ProcessingResponse{}, fmt.Errorf("kafka write ingest: %w", err)
-	}
 
 	waitCtx, cancel := context.WithTimeout(ctx, 3*time.Minute)
 	defer cancel()
@@ -89,4 +89,19 @@ func (b *IngestBridge) PublishAndWait(ctx context.Context, payload models.Proces
 		}
 		return *out.Processing, nil
 	}
+}
+
+func (b *IngestBridge) writeIngest(ctx context.Context, corr string, payload models.ProcessingIngestRequest) error {
+	env := IngestEnvelope{CorrelationID: corr, Ingest: payload}
+	body, err := json.Marshal(env)
+	if err != nil {
+		return err
+	}
+	if err := b.writer.WriteMessages(ctx, kafkago.Message{
+		Key:   []byte(corr),
+		Value: body,
+	}); err != nil {
+		return fmt.Errorf("kafka write ingest: %w", err)
+	}
+	return nil
 }

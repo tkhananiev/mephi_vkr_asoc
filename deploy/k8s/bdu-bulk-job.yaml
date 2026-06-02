@@ -1,5 +1,5 @@
 # Одноразовый триггер полного импорта БДУ внутри кластера (POST к reference-data-service).
-# Полная инструкция (PVC → kubectl cp → этот Job): deploy/k8s/README.md § «БДУ: полный дамп только в Kubernetes».
+# Полная инструкция (PVC → kubectl cp → этот Job): deploy/k8s/README.md § «БДУ: полный дамп в назначенном окружении».
 # Не входит в kustomization (не кати при каждом apply стенда).
 #
 # Перед повторным запуском удали завершённый Job:

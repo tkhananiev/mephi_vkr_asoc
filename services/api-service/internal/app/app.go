@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"mephi_vkr_asoc/services/api-service/internal/config"
 	"mephi_vkr_asoc/services/api-service/internal/httpapi"
@@ -34,13 +35,14 @@ func New(cfg config.Config) (*App, error) {
 	var kafkaBridge *pkgkafka.IngestBridge
 	if len(cfg.KafkaBrokers) > 0 {
 		ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
-		terr := pkgkafka.EnsureTopics(ctx, cfg.KafkaBrokers, cfg.KafkaTopicIngest, cfg.KafkaTopicResult)
+		terr := pkgkafka.EnsureTopics(ctx, cfg.KafkaBrokers, cfg.KafkaTopicIngest, cfg.KafkaIngestPartitions, cfg.KafkaTopicResult, cfg.KafkaResultPartitions)
 		cancel()
 		if terr != nil {
 			return nil, fmt.Errorf("kafka ensure topics: %w", terr)
 		}
 		kafkaBridge = pkgkafka.NewIngestBridge(cfg.KafkaBrokers, cfg.KafkaTopicIngest, cfg.KafkaTopicResult)
-		log.Printf("api-service: findings ingest via Kafka (%s -> %s)", cfg.KafkaTopicIngest, cfg.KafkaTopicResult)
+		log.Printf("api-service: findings ingest via Kafka (%s:%d partitions, async 202; %s:%d for scan wait)",
+			cfg.KafkaTopicIngest, cfg.KafkaIngestPartitions, cfg.KafkaTopicResult, cfg.KafkaResultPartitions)
 	} else {
 		log.Printf("api-service: findings ingest via HTTP POST to processing-service (для стенда задайте APP_KAFKA_BROKERS и APP_REQUIRE_KAFKA_FOR_FINDINGS_INGEST=true при необходимости)")
 	}
@@ -55,6 +57,9 @@ func New(cfg config.Config) (*App, error) {
 		cfg.JiraServiceURL,
 		cfg.SemgrepServiceURL,
 		cfg.GitleaksServiceURL,
+		cfg.ScaServiceURL,
+		cfg.DastServiceURL,
+		cfg.FindingsAdapterURL,
 		kafkaBridge,
 		func(scannerID string) (invokeURL string, scannerName string, runnerCommand string, ok bool) {
 			return intStore.LookupDynamicInvoke(scannerID)
@@ -119,12 +124,13 @@ func New(cfg config.Config) (*App, error) {
 	)
 	h.Register(mux)
 	swaggerui.Register(mux)
+	mux.Handle("/metrics", promhttp.Handler())
 
 	var wrapJWT []byte
 	if len(jwtBytes) >= 32 {
 		wrapJWT = jwtBytes
 	}
-	root := httpapi.WithAPIKeyOrUserJWT(cfg.AuthAPIKey, wrapJWT, mux)
+	root := httpapi.WithHTTPMetrics(httpapi.WithAPIKeyOrUserJWT(cfg.AuthAPIKey, wrapJWT, mux))
 
 	return &App{
 		server: &http.Server{

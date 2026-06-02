@@ -1,4 +1,6 @@
 # HPA: средняя загрузка CPU относительно requests — порог 90% (нефункциональное требование к масштабированию).
+# По умолчанию НЕ включён в kustomization.yaml (честное сравнение с Defect Dojo при 1 реплике).
+# Включение: добавить hpa.yaml в resources kustomization.yaml и kubectl apply -f deploy/k8s/hpa.yaml
 # Требуется metrics-server в кластере (minikube: minikube addons enable metrics-server).
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler

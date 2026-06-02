@@ -23,8 +23,9 @@ type Item struct {
 	Summary      string   `json:"summary"`
 	Phase        string   `json:"phase"`
 	Enabled      bool     `json:"enabled"`
-	InputKind    string   `json:"input_kind"` // filesystem | lockfile | http
-	ScannerName  string   `json:"scanner_name,omitempty"`
+	InputKind        string   `json:"input_kind"` // filesystem | lockfile | http | oci_image | http_target | manifest_only
+	RequiredContext  []string `json:"required_context,omitempty"` // scm | base_url
+	ScannerName      string   `json:"scanner_name,omitempty"`
 	APIScanPath  string   `json:"api_scan_path,omitempty"`
 	ConsolePath  string   `json:"console_path,omitempty"`
 	Capabilities []string `json:"capabilities,omitempty"`
@@ -48,14 +49,15 @@ type Item struct {
 // builtinCatalog жёстко зашит в api-service; доп. строки — только через overlay (PUT админки).
 var builtinCatalog = []Item{
 	{
-		ID:           "semgrep",
-		Kind:         "SAST",
-		Title:        "Semgrep",
-		Summary:      "",
-		Phase:        "ready",
-		Enabled:      true,
-		InputKind:    "filesystem",
-		ScannerName:  "semgrep",
+		ID:              "semgrep",
+		Kind:            "SAST",
+		Title:           "Semgrep",
+		Summary:         "Статический анализ исходного кода (SAST) по правилам Semgrep.",
+		Phase:           "ready",
+		Enabled:         true,
+		InputKind:       "filesystem",
+		RequiredContext: []string{"scm"},
+		ScannerName:     "semgrep",
 		APIScanPath:  "/api/v1/scans",
 		ConsolePath:  "/app/scan/semgrep",
 		Capabilities: []string{"sast", "filesystem_target"},
@@ -72,6 +74,35 @@ var builtinCatalog = []Item{
 		APIScanPath:  "/api/v1/scans/gitleaks",
 		ConsolePath:  "/app/scan/gitleaks",
 		Capabilities: []string{"secrets", "filesystem_target"},
+	},
+	{
+		ID:              "trivy-sca",
+		Kind:            "SCA",
+		Title:           "Trivy (SCA)",
+		Summary:         "Анализ зависимостей и уязвимостей в lockfile и файловой системе репозитория.",
+		Phase:           "ready",
+		Enabled:         true,
+		InputKind:       "lockfile",
+		RequiredContext: []string{"scm"},
+		ScannerName:     "trivy-sca",
+		APIScanPath:     "/api/v1/scans/sca",
+		ConsolePath:     "/app/scan/trivy-sca",
+		Capabilities:    []string{"sca", "lockfile_target", "filesystem_target"},
+	},
+	{
+		ID:              "zap-dast",
+		Kind:            "DAST",
+		Title:           "ZAP (DAST)",
+		Summary:         "Динамический анализ HTTP-цели через OWASP ZAP baseline (нормализованные находки для processing).",
+		Phase:           "ready",
+		Enabled:         true,
+		InputKind:       "http_target",
+		RequiredContext: []string{"base_url"},
+		ScannerName:     "zap-dast",
+		APIScanPath:     "/api/v1/scans/dast",
+		ConsolePath:     "/app/scan/zap-dast",
+		Capabilities:    []string{"dast", "http_target"},
+		Note:            "Укажите публичный base URL приложения; секреты и URL не хранятся в браузере.",
 	},
 }
 
@@ -223,8 +254,12 @@ func Validate(it Item, reserved map[string]struct{}) error {
 		return fmt.Errorf("phase must be ready or planned")
 	}
 	ik := strings.TrimSpace(strings.ToLower(it.InputKind))
-	if ik != "filesystem" && ik != "lockfile" && ik != "http" {
-		return fmt.Errorf("input_kind must be filesystem, lockfile or http")
+	allowedInput := map[string]struct{}{
+		"filesystem": {}, "lockfile": {}, "http": {},
+		"oci_image": {}, "http_target": {}, "manifest_only": {},
+	}
+	if _, ok := allowedInput[ik]; !ok {
+		return fmt.Errorf("input_kind must be filesystem, lockfile, http, oci_image, http_target or manifest_only")
 	}
 	if strings.TrimSpace(it.Title) == "" {
 		return errors.New("title required")

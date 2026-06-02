@@ -1,4 +1,4 @@
-# Kubernetes (контур ASOC)
+# Развёртывание в кластере (контур ASOC)
 
 **Стенд по умолчанию — доступ по публичному IP, без FQDN:** в Ingress не задаётся `host`, в `public-urls.yaml` — `http://<IP>` и `http://<IP>/jira`. Домен не требуется.
 
@@ -57,7 +57,7 @@ kubectl apply -f deploy/k8s/secret.yaml && kubectl kustomize deploy/k8s --load-r
 | Secret | **`asoc-secrets`** — **не в kustomization**; создай из `secret.example.yaml` **до** или вместе с первым apply |
 | Service + StatefulSet | `postgres` + PVC |
 | Service + Deployment | `kafka` |
-| **PVC `bdu-catalog-import`** | **`bdu-catalog-pvc.yaml`** — том **`/bdu-import`** под **`vulxml.xml`** и **`vullist.xlsx`**; загрузка и Job — см. § **«БДУ: полный дамп только в Kubernetes»** ниже |
+| **PVC `bdu-catalog-import`** | **`bdu-catalog-pvc.yaml`** — том **`/bdu-import`** под **`vulxml.xml`** и **`vullist.xlsx`**; загрузка и Job — см. § **«БДУ: полный дамп в назначенном окружении»** ниже |
 | Service + Deployment | `reference-data-service`, `processing-service`, `semgrep-service`, `api-service`, `jira-integration-service`, `jira-mock` |
 | Service + Deployment | `asoc-web` (фронт) |
 | Ingress | `asoc-app`: основной домен (`/`, `/api`, `/jira` → **asoc-web**); **`jira.atomic-asoc.ru`** → **jira-mock:8090** |
@@ -78,9 +78,9 @@ kubectl -n asoc exec -i statefulset/postgres -- psql -U asoc -d asoc \
 
 После DDL перезапустите **`deployment/api-service`** и **`deployment/processing-service`**, если менялись только образы через `kubectl rollout restart`; само наличие `APP_POSTGRES_DSN` у `api-service` задано в **`workloads.yaml`** из секрета `postgres-dsn`.
 
-## БДУ: полный дамп только в Kubernetes (PVC + Job)
+## БДУ: полный дамп в назначенном окружении (том PVC + Job)
 
-Полная выгрузка ФСТЭК (`vulxml.xml` + `vullist.xlsx`) **импортируется во время работы приложения только внутри кластера**: файлы должны лежать в томе `bdu-catalog-import`, смонтированном у `reference-data-service` как **`/bdu-import`** (см. `workloads.yaml`). Локальный `docker-compose` для этого сценария не используйте — на стенде достаточно шагов ниже.
+Полная выгрузка ФСТЭК (`vulxml.xml` + `vullist.xlsx`) **импортируется во время работы приложения только когда том смонтирован в целевом полигоне**: файлы должны лежать в томе `bdu-catalog-import`, смонтированном у `reference-data-service` как **`/bdu-import`** (см. `workloads.yaml`). Упрощённая локальная сборка этого сценария не задаётся — на действующей площадке достаточно шагов ниже.
 
 ### 1. Применить PVC и дождаться пода справочника
 
@@ -266,7 +266,7 @@ curl -sS -X POST http://127.0.0.1:8080/api/v1/scans \
 
 - **`metrics-server`** должен быть установлен в кластере (для `kubectl top` и метрик CPU в HPA). В **minikube**: `minikube addons enable metrics-server`.
 - Файл **`hpa.yaml`** (входит в `kubectl apply -k`): HorizontalPodAutoscaler для **`api-service`** и **`processing-service`** с целевой утилизацией **CPU 90%** от `resources.requests` в `workloads.yaml`. Порог задан как нефункциональное требование к автомасштабированию.
-- Проверка: `kubectl get hpa -n asoc -w` во время нагрузки (`loadtest/` в корне репозитория).
+- Проверка: `kubectl get hpa -n asoc -w` во время нагрузки (каталог **`../loadtest/`** вне репозитория).
 
 ## 8. Prometheus и Grafana
 
@@ -274,6 +274,8 @@ curl -sS -X POST http://127.0.0.1:8080/api/v1/scans \
 
 ## 9. Нагрузочное тестирование и отчёт
 
-- Скрипты **wrk** и инструкция: **`loadtest/README.md`**.
-- Сравнение с **Defect Dojo**: **`loadtest/defectdojo/README.md`**.
-- Шаблон отчёта с тест-кейсами и таблицей сравнения: **`loadtest/LOAD_TEST_REPORT.md`**.
+Каталог **`../loadtest/`** (рядом с репозиторием, вне Git):
+
+- Скрипты **wrk** / **hey** и инструкция: **`README.md`**, **`METHODOLOGY.md`**
+- Сравнение с **Defect Dojo**: **`defectdojo/README.md`**
+- Шаблон отчёта: **`LOAD_TEST_REPORT.md`**

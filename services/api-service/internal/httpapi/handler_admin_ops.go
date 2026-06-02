@@ -40,7 +40,7 @@ func (h *Handler) handleDockerLogs(w http.ResponseWriter, r *http.Request) {
 	}
 	if h.podOps == nil {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{
-			"error": "Логи и рестарт недоступны: включите APP_K8S_OPS_ENABLED в Kubernetes (см. RBAC и ServiceAccount api-service) или APP_DOCKER_OPS_ENABLED в docker-compose с /var/run/docker.sock.",
+			"error": "Логи и рестарт недоступны: включите APP_K8S_OPS_ENABLED с RBAC и ServiceAccount для api-service или APP_DOCKER_OPS_ENABLED для локальной контейнерной сборки с /var/run/docker.sock.",
 		})
 		return
 	}
@@ -83,7 +83,7 @@ func (h *Handler) handleDockerRestart(w http.ResponseWriter, r *http.Request) {
 	}
 	if h.podOps == nil {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{
-			"error": "Логи и рестарт недоступны: включите APP_K8S_OPS_ENABLED в Kubernetes (см. RBAC и ServiceAccount api-service) или APP_DOCKER_OPS_ENABLED в docker-compose с /var/run/docker.sock.",
+			"error": "Логи и рестарт недоступны: включите APP_K8S_OPS_ENABLED с RBAC и ServiceAccount для api-service или APP_DOCKER_OPS_ENABLED для локальной контейнерной сборки с /var/run/docker.sock.",
 		})
 		return
 	}

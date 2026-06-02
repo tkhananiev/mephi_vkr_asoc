@@ -42,8 +42,8 @@ type SyncService struct {
 	nvd       NVDSourceClient
 	bduBulk   *bdu.BulkImporter
 
-	nvdGate     stdsync.Mutex // SyncNVD / фоновый HTTP не параллелятся
-	bduBulkGate stdsync.Mutex // полный импорт БДУ
+	nvdGate      stdsync.Mutex // SyncNVD / фоновый HTTP не параллелятся
+	bduBulkGate  stdsync.Mutex // полный импорт БДУ
 }
 
 func NewSyncService(

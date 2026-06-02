@@ -2,9 +2,12 @@ package postgres
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -221,6 +224,7 @@ func (r *Repository) UpsertGroup(ctx context.Context, groupKey, severity, groupi
 			severity_max = EXCLUDED.severity_max,
 			assets_count = core.vulnerability_groups.assets_count + 1,
 			updated_at = NOW()
+			-- status сохраняется (false_positive / risk_accepted не сбрасываются новыми находками)
 		RETURNING id
 	`, groupKey, groupingRule, severity).Scan(&id)
 	return id, true, err
@@ -235,7 +239,16 @@ func (r *Repository) LinkGroupToVulnerability(ctx context.Context, groupID, vuln
 	return err
 }
 
-func (r *Repository) ListGroups(ctx context.Context, limit int, ownerUserID *int64, consoleProductID *int64) ([]models.VulnerabilityGroup, error) {
+func (r *Repository) ListGroups(ctx context.Context, limit int, ownerUserID *int64, consoleProductID *int64, statusFilter string) ([]models.VulnerabilityGroup, error) {
+	var statusArg interface{}
+	switch strings.TrimSpace(statusFilter) {
+	case "", "open":
+		statusArg = "open"
+	case "false_positive", "risk_accepted", "all":
+		statusArg = strings.TrimSpace(statusFilter)
+	default:
+		statusArg = "open"
+	}
 	rows, err := r.pool.Query(ctx, `
 		SELECT g.id, g.group_key, g.grouping_rule, g.severity_max, g.assets_count, g.status
 		FROM core.vulnerability_groups g
@@ -257,9 +270,13 @@ func (r *Repository) ListGroups(ctx context.Context, limit int, ownerUserID *int
 				  AND pr.console_product_id = $3
 			)
 		)
+		AND (
+			$4::text = 'all'
+			OR g.status = $4::text
+		)
 		ORDER BY g.updated_at DESC
 		LIMIT $1
-	`, limit, ownerUserID, consoleProductID)
+	`, limit, ownerUserID, consoleProductID, statusArg)
 	if err != nil {
 		return nil, err
 	}
@@ -274,6 +291,38 @@ func (r *Repository) ListGroups(ctx context.Context, limit int, ownerUserID *int
 		result = append(result, item)
 	}
 	return result, rows.Err()
+}
+
+func (r *Repository) UpdateGroupStatus(ctx context.Context, groupID int64, status string, ownerUserID *int64) (models.VulnerabilityGroup, error) {
+	var item models.VulnerabilityGroup
+	err := r.pool.QueryRow(ctx, `
+		UPDATE core.vulnerability_groups g
+		SET status = $2, updated_at = NOW()
+		WHERE g.id = $1
+		  AND (
+			$3::bigint IS NULL
+			OR EXISTS (
+				SELECT 1
+				FROM core.group_vulnerabilities gv
+				JOIN core.vulnerabilities v ON v.id = gv.vulnerability_id
+				JOIN core.finding_vulnerabilities fv ON fv.vulnerability_id = v.id
+				JOIN core.findings f ON f.id = fv.finding_id
+				JOIN core.processing_runs pr ON pr.id = f.processing_run_id
+				WHERE gv.group_id = g.id
+				  AND pr.owner_user_id = $3
+			)
+		  )
+		RETURNING g.id, g.group_key, g.grouping_rule, g.severity_max, g.assets_count, g.status
+	`, groupID, status, ownerUserID).Scan(
+		&item.ID, &item.GroupKey, &item.GroupingRule, &item.SeverityMax, &item.AssetsCount, &item.Status,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return models.VulnerabilityGroup{}, fmt.Errorf("group not found or forbidden")
+		}
+		return models.VulnerabilityGroup{}, err
+	}
+	return item, nil
 }
 
 func reportFilterArg(f *models.VulnerabilityReportFilter, pick func(*models.VulnerabilityReportFilter) *string) interface{} {
@@ -494,4 +543,149 @@ func (r *Repository) ListVulnerabilityReport(ctx context.Context, limit int, own
 		out = append(out, row)
 	}
 	return out, rows.Err()
+}
+
+func (r *Repository) GetGroupJiraContext(ctx context.Context, groupID int64, ownerUserID *int64, consoleProductID *int64) (models.GroupJiraContext, error) {
+	var ctxOut models.GroupJiraContext
+	err := r.pool.QueryRow(ctx, `
+		SELECT g.id, g.group_key, COALESCE(g.severity_max, '')
+		FROM core.vulnerability_groups g
+		WHERE g.id = $1
+		  AND (
+			$2::bigint IS NULL
+			OR g.group_key LIKE ('u:' || $2::bigint::text || ':%')
+		  )
+		  AND (
+			$3::bigint IS NULL
+			OR EXISTS (
+				SELECT 1
+				FROM core.group_vulnerabilities gv_a
+				JOIN core.vulnerabilities v_a ON v_a.id = gv_a.vulnerability_id
+				JOIN core.finding_vulnerabilities fv_a ON fv_a.vulnerability_id = v_a.id
+				JOIN core.findings f_a ON f_a.id = fv_a.finding_id
+				JOIN core.processing_runs pr_a ON pr_a.id = f_a.processing_run_id
+				WHERE gv_a.group_id = g.id
+				  AND ($2::bigint IS NULL OR pr_a.owner_user_id = $2)
+				  AND pr_a.console_product_id = $3
+			)
+		  )
+	`, groupID, ownerUserID, consoleProductID).Scan(&ctxOut.GroupID, &ctxOut.GroupKey, &ctxOut.SeverityMax)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return models.GroupJiraContext{}, fmt.Errorf("group not found or forbidden")
+		}
+		return models.GroupJiraContext{}, err
+	}
+
+	rows, err := r.pool.Query(ctx, `
+		SELECT
+			v.id,
+			COALESCE(
+				NULLIF(TRIM(v.product), ''),
+				NULLIF(TRIM(fp.payload_path), ''),
+				NULLIF(TRIM(fp.asset_id), ''),
+				''
+			),
+			COALESCE(NULLIF(TRIM(v.cve_id), ''), ''),
+			COALESCE(
+				CASE WHEN link_rr.source_code IS NOT NULL AND link_rr.source_code LIKE 'bdu%' THEN link_rr.external_id END,
+				(SELECT bdu_rr.external_id
+				 FROM catalog.reference_records bdu_rr
+				 INNER JOIN catalog.reference_aliases bdu_ra ON bdu_ra.reference_record_id = bdu_rr.id
+				 WHERE bdu_rr.source_code LIKE 'bdu%'
+				   AND TRIM(COALESCE(v.cve_id, '')) <> ''
+				   AND bdu_ra.alias_type = 'CVE'
+				   AND bdu_ra.alias_value = TRIM(v.cve_id)
+				 ORDER BY bdu_rr.updated_at DESC
+				 LIMIT 1),
+				''
+			),
+			COALESCE(nvd_rr.description, CASE WHEN link_rr.source_code = 'nvd' THEN link_rr.description END, ''),
+			COALESCE(bdu_rr.description, CASE WHEN link_rr.source_code LIKE 'bdu%' THEN link_rr.description END, ''),
+			COALESCE(
+				NULLIF(TRIM(nvd_rr.severity), ''),
+				NULLIF(TRIM(bdu_rr.severity), ''),
+				NULLIF(TRIM(v.normalized_severity), ''),
+				''
+			),
+			CASE
+				WHEN NULLIF(TRIM(nvd_rr.severity), '') IS NOT NULL THEN 'CVSS (NVD)'
+				WHEN NULLIF(TRIM(bdu_rr.severity), '') IS NOT NULL THEN 'БДУ ФСТЭК'
+				WHEN NULLIF(TRIM(v.normalized_severity), '') IS NOT NULL THEN 'находка сканера'
+				ELSE ''
+			END
+		FROM core.vulnerabilities v
+		JOIN core.group_vulnerabilities gv ON gv.vulnerability_id = v.id AND gv.group_id = $1
+		LEFT JOIN catalog.reference_records link_rr ON link_rr.id = v.reference_record_id
+		LEFT JOIN catalog.reference_records nvd_rr
+			ON nvd_rr.source_code = 'nvd' AND nvd_rr.external_id = TRIM(COALESCE(v.cve_id, ''))
+		LEFT JOIN catalog.reference_records bdu_rr
+			ON bdu_rr.source_code LIKE 'bdu%'
+			AND bdu_rr.external_id = COALESCE(
+				CASE WHEN link_rr.source_code IS NOT NULL AND link_rr.source_code LIKE 'bdu%' THEN link_rr.external_id END,
+				(SELECT bdu2.external_id
+				 FROM catalog.reference_records bdu2
+				 INNER JOIN catalog.reference_aliases bdu_ra2 ON bdu_ra2.reference_record_id = bdu2.id
+				 WHERE bdu2.source_code LIKE 'bdu%'
+				   AND TRIM(COALESCE(v.cve_id, '')) <> ''
+				   AND bdu_ra2.alias_type = 'CVE'
+				   AND bdu_ra2.alias_value = TRIM(v.cve_id)
+				 ORDER BY bdu2.updated_at DESC
+				 LIMIT 1)
+			)
+		LEFT JOIN LATERAL (
+			SELECT
+				f.asset_id,
+				NULLIF(TRIM(f.payload_json #>> '{metadata,path}'), '') AS payload_path
+			FROM core.finding_vulnerabilities fv
+			JOIN core.findings f ON f.id = fv.finding_id
+			LEFT JOIN core.processing_runs pr ON pr.id = f.processing_run_id
+			WHERE fv.vulnerability_id = v.id
+			  AND ($2::bigint IS NULL OR pr.owner_user_id IS NULL OR pr.owner_user_id = $2)
+			  AND ($3::bigint IS NULL OR pr.console_product_id IS NULL OR pr.console_product_id = $3)
+			ORDER BY f.id DESC
+			LIMIT 1
+		) fp ON true
+		WHERE (
+			$2::bigint IS NULL
+			OR EXISTS (
+				SELECT 1
+				FROM core.finding_vulnerabilities fv_o
+				JOIN core.findings f_o ON f_o.id = fv_o.finding_id
+				LEFT JOIN core.processing_runs pr_o ON pr_o.id = f_o.processing_run_id
+				WHERE fv_o.vulnerability_id = v.id
+				  AND (pr_o.owner_user_id IS NULL OR pr_o.owner_user_id = $2)
+			)
+		)
+		ORDER BY v.id
+	`, groupID, ownerUserID, consoleProductID)
+	if err != nil {
+		return models.GroupJiraContext{}, err
+	}
+	defer rows.Close()
+
+	ctxOut.Vulnerabilities = make([]models.GroupJiraVulnerability, 0, 4)
+	for rows.Next() {
+		var item models.GroupJiraVulnerability
+		if err := rows.Scan(
+			&item.VulnerabilityID,
+			&item.AssetPath,
+			&item.CVE,
+			&item.BDUID,
+			&item.CVEDescription,
+			&item.BDUDescription,
+			&item.Criticality,
+			&item.CriticalitySource,
+		); err != nil {
+			return models.GroupJiraContext{}, err
+		}
+		ctxOut.Vulnerabilities = append(ctxOut.Vulnerabilities, item)
+	}
+	if err := rows.Err(); err != nil {
+		return models.GroupJiraContext{}, err
+	}
+	if len(ctxOut.Vulnerabilities) == 0 {
+		return models.GroupJiraContext{}, fmt.Errorf("group not found or forbidden")
+	}
+	return ctxOut, nil
 }

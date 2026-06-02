@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"path/filepath"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -30,17 +30,23 @@ type Orchestrator struct {
 	jiraURL       string
 	semgrepURL    string
 	gitleaksURL   string
+	scaURL        string
+	dastURL       string
+	adapterURL    string
 	httpClient    *http.Client
 	kafkaIngest   *apikafka.IngestBridge
 	dynamicLookup DynamicScannerLookup
 }
 
-func New(processingURL, jiraURL, semgrepURL, gitleaksURL string, kafkaIngest *apikafka.IngestBridge, dynamicLookup DynamicScannerLookup) *Orchestrator {
+func New(processingURL, jiraURL, semgrepURL, gitleaksURL, scaURL, dastURL, adapterURL string, kafkaIngest *apikafka.IngestBridge, dynamicLookup DynamicScannerLookup) *Orchestrator {
 	return &Orchestrator{
 		processingURL: strings.TrimRight(processingURL, "/"),
 		jiraURL:       strings.TrimRight(jiraURL, "/"),
 		semgrepURL:    strings.TrimRight(semgrepURL, "/"),
 		gitleaksURL:   strings.TrimRight(gitleaksURL, "/"),
+		scaURL:        strings.TrimRight(scaURL, "/"),
+		dastURL:       strings.TrimRight(dastURL, "/"),
+		adapterURL:    strings.TrimRight(adapterURL, "/"),
 		httpClient:    &http.Client{Timeout: 10 * time.Minute},
 		kafkaIngest:   kafkaIngest,
 		dynamicLookup: dynamicLookup,
@@ -63,13 +69,25 @@ func (o *Orchestrator) RunScan(ctx context.Context, scannerID string, request mo
 			req.ScannerName = "gitleaks"
 		}
 		return o.runGitleaksScenario(ctx, req, ownerUserID)
+	case "trivy-sca", "sca", "trivy":
+		req := request
+		if strings.TrimSpace(req.ScannerName) == "" {
+			req.ScannerName = "trivy-sca"
+		}
+		return o.runScaScenario(ctx, req, ownerUserID)
+	case "zap-dast", "dast", "zap":
+		req := request
+		if strings.TrimSpace(req.ScannerName) == "" {
+			req.ScannerName = "zap-dast"
+		}
+		return o.runDastScenario(ctx, req, ownerUserID)
 	default:
 		if o.dynamicLookup != nil {
 			if invokeURL, scannerName, runnerCmd, ok := o.dynamicLookup(id); ok && strings.TrimSpace(invokeURL) != "" {
 				return o.runDynamicHTTPScannerScenario(ctx, id, invokeURL, scannerName, runnerCmd, request, ownerUserID)
 			}
 		}
-		return models.PassportResponse{}, fmt.Errorf("%w: %q (supported: semgrep, gitleaks, or additional catalog with scanner_invoke_url)", ErrUnsupportedScannerID, id)
+		return models.PassportResponse{}, fmt.Errorf("%w: %q (supported: semgrep, gitleaks, trivy-sca, zap-dast, or additional catalog with scanner_invoke_url)", ErrUnsupportedScannerID, id)
 	}
 }
 
@@ -83,13 +101,25 @@ func (o *Orchestrator) RunGitleaksScenario(ctx context.Context, request models.S
 	return o.RunScan(ctx, "gitleaks", request, ownerUserID)
 }
 
+// RunScaScenario — POST /api/v1/scans/sca (Trivy SCA).
+func (o *Orchestrator) RunScaScenario(ctx context.Context, request models.ScanRequest, ownerUserID int64) (models.PassportResponse, error) {
+	return o.RunScan(ctx, "trivy-sca", request, ownerUserID)
+}
+
+// RunDastScenario — POST /api/v1/scans/dast (OWASP ZAP baseline через zap-dast-service).
+func (o *Orchestrator) RunDastScenario(ctx context.Context, request models.ScanRequest, ownerUserID int64) (models.PassportResponse, error) {
+	return o.RunScan(ctx, "zap-dast", request, ownerUserID)
+}
+
 func (o *Orchestrator) runSemgrepScenario(ctx context.Context, request models.ScanRequest, ownerUserID int64) (models.PassportResponse, error) {
-	scanResult, err := o.callSemgrepService(ctx, request)
+	raw, err := o.callSemgrepService(ctx, request)
 	if err != nil {
 		return models.PassportResponse{}, err
 	}
-
-	findings := findingsFromSemgrepResult(scanResult)
+	findings, err := o.adaptScannerOutput(ctx, "semgrep", raw, "")
+	if err != nil {
+		return models.PassportResponse{}, err
+	}
 	return o.passportAfterFindings(ctx, request, findings, ownerUserID)
 }
 
@@ -117,21 +147,6 @@ func (o *Orchestrator) passportAfterFindings(ctx context.Context, request models
 		return models.PassportResponse{}, err
 	}
 
-	tickets := make([]models.TicketResponse, 0, len(groups))
-	for _, group := range groups {
-		ticket, err := o.createTicket(ctx, models.TicketRequest{
-			GroupID:        group.ID,
-			GroupKey:       group.GroupKey,
-			Severity:       group.SeverityMax,
-			AssetsCount:    group.AssetsCount,
-			CorrelationRef: group.GroupKey,
-		})
-		if err != nil {
-			return models.PassportResponse{}, err
-		}
-		tickets = append(tickets, ticket)
-	}
-
 	scanLabel := DescribeScanTarget(request)
 	return models.PassportResponse{
 		ScannerName: request.ScannerName,
@@ -139,7 +154,7 @@ func (o *Orchestrator) passportAfterFindings(ctx context.Context, request models
 		Findings:    findings,
 		Processing:  processingResponse,
 		Groups:      groups,
-		Tickets:     tickets,
+		Tickets:     []models.TicketResponse{},
 	}, nil
 }
 
@@ -148,62 +163,35 @@ func (o *Orchestrator) runGitleaksScenario(ctx context.Context, request models.S
 	if err != nil {
 		return models.PassportResponse{}, err
 	}
-	glFindings, err := parseGitleaksFindings(rawBody)
+	findings, err := o.adaptScannerOutput(ctx, "gitleaks", rawBody, "")
 	if err != nil {
 		return models.PassportResponse{}, err
 	}
-
-	findings := findingsFromGitleaksFindings(glFindings)
-
 	return o.passportAfterFindings(ctx, request, findings, ownerUserID)
 }
 
-func findingsFromGitleaksFindings(gl []models.GitleaksFinding) []models.ProcessingFindingItem {
-	findings := make([]models.ProcessingFindingItem, 0, len(gl))
-	for _, f := range gl {
-		path := strings.TrimSpace(f.File)
-		if path == "" {
-			path = "unknown"
-		}
-		id := strings.TrimSpace(f.RuleID)
-		if id == "" {
-			id = "gitleaks"
-		}
-		meta := map[string]any{
-			"description": f.Description,
-			"line":        f.StartLine,
-		}
-		if len(f.Tags) > 0 {
-			meta["tags"] = f.Tags
-		}
-		findings = append(findings, models.ProcessingFindingItem{
-			AssetID:    filepath.Base(path),
-			Identifier: id,
-			Severity:   "high",
-			Component:  path,
-			Version:    "",
-			CVE:        "",
-			CWE:        "",
-			Metadata:   meta,
-			RawPayload: map[string]any{
-				"rule_id":     f.RuleID,
-				"fingerprint": f.Fingerprint,
-			},
-		})
+func (o *Orchestrator) runScaScenario(ctx context.Context, request models.ScanRequest, ownerUserID int64) (models.PassportResponse, error) {
+	rawBody, err := o.callScaService(ctx, request)
+	if err != nil {
+		return models.PassportResponse{}, err
 	}
-	return findings
+	findings, err := o.adaptScannerOutput(ctx, "trivy", rawBody, "")
+	if err != nil {
+		return models.PassportResponse{}, err
+	}
+	return o.passportAfterFindings(ctx, request, findings, ownerUserID)
 }
 
-func parseGitleaksFindings(raw []byte) ([]models.GitleaksFinding, error) {
-	raw = bytes.TrimSpace(raw)
-	if len(raw) == 0 || bytes.Equal(raw, []byte("null")) {
-		return nil, nil
+func (o *Orchestrator) runDastScenario(ctx context.Context, request models.ScanRequest, ownerUserID int64) (models.PassportResponse, error) {
+	rawBody, err := o.callDastService(ctx, request)
+	if err != nil {
+		return models.PassportResponse{}, err
 	}
-	var findings []models.GitleaksFinding
-	if err := json.Unmarshal(raw, &findings); err != nil {
-		return nil, fmt.Errorf("decode gitleaks json: %w", err)
+	findings, err := o.adaptScannerOutput(ctx, "auto", rawBody, request.TargetURL)
+	if err != nil {
+		return models.PassportResponse{}, err
 	}
-	return findings, nil
+	return o.passportAfterFindings(ctx, request, findings, ownerUserID)
 }
 
 func (o *Orchestrator) runDynamicHTTPScannerScenario(ctx context.Context, scannerID string, invokeURL string, scannerName string, runnerCommand string, request models.ScanRequest, ownerUserID int64) (models.PassportResponse, error) {
@@ -215,7 +203,7 @@ func (o *Orchestrator) runDynamicHTTPScannerScenario(ctx context.Context, scanne
 	if err != nil {
 		return models.PassportResponse{}, err
 	}
-	findings, err := decodeFlexibleScannerResponse(raw)
+	findings, err := o.adaptScannerOutput(ctx, "auto", raw, request.TargetURL)
 	if err != nil {
 		return models.PassportResponse{}, fmt.Errorf("scanner %q: %w", scannerID, err)
 	}
@@ -282,63 +270,6 @@ func (o *Orchestrator) postDynamicScanPayload(ctx context.Context, invokeURL str
 	return io.ReadAll(resp.Body)
 }
 
-func decodeFlexibleScannerResponse(raw []byte) ([]models.ProcessingFindingItem, error) {
-	raw = bytes.TrimSpace(raw)
-	if len(raw) == 0 {
-		return nil, fmt.Errorf("empty response body")
-	}
-	switch raw[0] {
-	case '[':
-		var norm []models.ProcessingFindingItem
-		if err := json.Unmarshal(raw, &norm); err == nil {
-			return norm, nil
-		}
-		var gl []models.GitleaksFinding
-		if err := json.Unmarshal(raw, &gl); err == nil {
-			return findingsFromGitleaksFindings(gl), nil
-		}
-		return nil, fmt.Errorf("JSON array is neither normalized findings nor gitleaks report")
-	case '{':
-		var probe map[string]json.RawMessage
-		if err := json.Unmarshal(raw, &probe); err != nil {
-			return nil, err
-		}
-		if _, ok := probe["results"]; ok {
-			var sr models.SemgrepResult
-			if err := json.Unmarshal(raw, &sr); err != nil {
-				return nil, err
-			}
-			if len(sr.Results) == 0 && len(sr.Errors) > 0 {
-				var msgs []string
-				for _, e := range sr.Errors {
-					if strings.EqualFold(strings.TrimSpace(e.Level), "error") && strings.TrimSpace(e.Message) != "" {
-						msgs = append(msgs, strings.TrimSpace(e.Message))
-					}
-				}
-				if len(msgs) > 0 {
-					return nil, fmt.Errorf("%s", strings.Join(msgs, "; "))
-				}
-			}
-			return findingsFromSemgrepResult(sr), nil
-		}
-		if _, ok := probe["findings"]; ok {
-			var wrap struct {
-				Findings []models.ProcessingFindingItem `json:"findings"`
-			}
-			if err := json.Unmarshal(raw, &wrap); err != nil {
-				return nil, err
-			}
-			if wrap.Findings == nil {
-				return []models.ProcessingFindingItem{}, nil
-			}
-			return wrap.Findings, nil
-		}
-		return nil, fmt.Errorf(`JSON object must contain "results" (semgrep) or "findings" (normalized)`)
-	default:
-		return nil, fmt.Errorf("response must be JSON array or object")
-	}
-}
-
 type gitleaksScanRequest struct {
 	TargetPath       string `json:"target_path,omitempty"`
 	GitRepositoryURL string `json:"git_repository_url,omitempty"`
@@ -380,6 +311,61 @@ func (o *Orchestrator) callGitleaksService(ctx context.Context, request models.S
 	return io.ReadAll(resp.Body)
 }
 
+type scaScanRequest struct {
+	TargetPath       string `json:"target_path,omitempty"`
+	GitRepositoryURL string `json:"git_repository_url,omitempty"`
+	GitRepositoryRef string `json:"git_repository_ref,omitempty"`
+}
+
+func (o *Orchestrator) callScaService(ctx context.Context, request models.ScanRequest) ([]byte, error) {
+	body, err := json.Marshal(scaScanRequest{
+		TargetPath:       request.TargetPath,
+		GitRepositoryURL: request.GitRepositoryURL,
+		GitRepositoryRef: request.GitRepositoryRef,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return o.postExecutorScan(ctx, o.scaURL+"/api/v1/scan", body, "trivy-sca-service")
+}
+
+type dastScanRequest struct {
+	TargetURL string `json:"target_url"`
+}
+
+func (o *Orchestrator) callDastService(ctx context.Context, request models.ScanRequest) ([]byte, error) {
+	body, err := json.Marshal(dastScanRequest{TargetURL: strings.TrimSpace(request.TargetURL)})
+	if err != nil {
+		return nil, err
+	}
+	return o.postExecutorScan(ctx, o.dastURL+"/api/v1/scan", body, "zap-dast-service")
+}
+
+func (o *Orchestrator) postExecutorScan(ctx context.Context, url string, body []byte, serviceLabel string) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := o.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 300 {
+		var errBody map[string]string
+		_ = json.NewDecoder(resp.Body).Decode(&errBody)
+		msg := fmt.Sprintf("%s returned status %d", serviceLabel, resp.StatusCode)
+		if errBody["error"] != "" {
+			msg = errBody["error"]
+		}
+		return nil, fmt.Errorf("%s", msg)
+	}
+	return io.ReadAll(resp.Body)
+}
+
 type semgrepScanRequest struct {
 	TargetPath       string `json:"target_path,omitempty"`
 	SemgrepConfig    string `json:"semgrep_config,omitempty"`
@@ -389,6 +375,9 @@ type semgrepScanRequest struct {
 
 // DescribeScanTarget — человекочитаемое описание источника для паспорта.
 func DescribeScanTarget(r models.ScanRequest) string {
+	if u := strings.TrimSpace(r.TargetURL); u != "" {
+		return u
+	}
 	if strings.TrimSpace(r.GitRepositoryURL) != "" {
 		ref := strings.TrimSpace(r.GitRepositoryRef)
 		if ref == "" {
@@ -403,7 +392,7 @@ func DescribeScanTarget(r models.ScanRequest) string {
 	return r.TargetPath
 }
 
-func (o *Orchestrator) callSemgrepService(ctx context.Context, request models.ScanRequest) (models.SemgrepResult, error) {
+func (o *Orchestrator) callSemgrepService(ctx context.Context, request models.ScanRequest) ([]byte, error) {
 	body, err := json.Marshal(semgrepScanRequest{
 		TargetPath:       request.TargetPath,
 		SemgrepConfig:    request.SemgrepConfig,
@@ -411,54 +400,72 @@ func (o *Orchestrator) callSemgrepService(ctx context.Context, request models.Sc
 		GitRepositoryRef: request.GitRepositoryRef,
 	})
 	if err != nil {
-		return models.SemgrepResult{}, err
+		return nil, err
 	}
+	return o.postExecutorScan(ctx, o.semgrepURL+"/api/v1/scan", body, "semgrep-service")
+}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, o.semgrepURL+"/api/v1/scan", bytes.NewReader(body))
+func (o *Orchestrator) adaptScannerOutput(ctx context.Context, format string, raw []byte, targetURL string) ([]models.ProcessingFindingItem, error) {
+	if strings.TrimSpace(o.adapterURL) == "" {
+		return nil, fmt.Errorf("findings-adapter URL not configured")
+	}
+	url := o.adapterURL + "/api/v1/adapt/" + strings.TrimSpace(format)
+	if strings.TrimSpace(targetURL) != "" {
+		url += "?target_url=" + urlQueryEscape(targetURL)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(raw))
 	if err != nil {
-		return models.SemgrepResult{}, err
+		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := o.httpClient.Do(req)
 	if err != nil {
-		return models.SemgrepResult{}, err
+		return nil, err
 	}
 	defer resp.Body.Close()
 
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
 	if resp.StatusCode >= 300 {
 		var errBody map[string]string
-		_ = json.NewDecoder(resp.Body).Decode(&errBody)
-		msg := fmt.Sprintf("semgrep-service returned status %d", resp.StatusCode)
+		_ = json.Unmarshal(respBody, &errBody)
+		msg := fmt.Sprintf("findings-adapter returned status %d", resp.StatusCode)
 		if errBody["error"] != "" {
 			msg = errBody["error"]
 		}
-		return models.SemgrepResult{}, fmt.Errorf("%s", msg)
+		return nil, fmt.Errorf("%s", msg)
 	}
 
-	rawBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return models.SemgrepResult{}, err
+	var adapted struct {
+		Findings []models.ProcessingFindingItem `json:"findings"`
 	}
-
-	var result models.SemgrepResult
-	if err := json.Unmarshal(rawBody, &result); err != nil {
-		return models.SemgrepResult{}, err
+	if err := json.Unmarshal(respBody, &adapted); err != nil {
+		return nil, fmt.Errorf("decode adapter response: %w", err)
 	}
-
-	if len(result.Results) == 0 && len(result.Errors) > 0 {
-		var msgs []string
-		for _, e := range result.Errors {
-			if strings.EqualFold(strings.TrimSpace(e.Level), "error") && strings.TrimSpace(e.Message) != "" {
-				msgs = append(msgs, strings.TrimSpace(e.Message))
-			}
-		}
-		if len(msgs) > 0 {
-			return models.SemgrepResult{}, fmt.Errorf("semgrep: %s", strings.Join(msgs, "; "))
-		}
+	if adapted.Findings == nil {
+		return []models.ProcessingFindingItem{}, nil
 	}
+	return adapted.Findings, nil
+}
 
-	return result, nil
+func urlQueryEscape(s string) string {
+	return url.QueryEscape(s)
+}
+
+// KafkaIngestEnabled — публичный ingest может ставить пакет в очередь без ожидания processing.
+func (o *Orchestrator) KafkaIngestEnabled() bool {
+	return o.kafkaIngest != nil
+}
+
+// EnqueueFindings публикует пакет в Kafka и сразу возвращает correlation_id.
+func (o *Orchestrator) EnqueueFindings(ctx context.Context, ingest models.ProcessingIngestRequest) (string, error) {
+	if o.kafkaIngest == nil {
+		return "", fmt.Errorf("kafka ingest not configured")
+	}
+	return o.kafkaIngest.Publish(ctx, ingest)
 }
 
 // IngestFindings передаёт уже нормализованные находки в processing (Kafka или HTTP).
@@ -532,6 +539,11 @@ func (o *Orchestrator) fetchGroups(ctx context.Context, ownerUserID int64) ([]mo
 	return result, nil
 }
 
+// CreateGroupTicket создаёт задачу в Jira для одной группы (ручной триггер из консоли).
+func (o *Orchestrator) CreateGroupTicket(ctx context.Context, payload models.TicketRequest) (models.TicketResponse, error) {
+	return o.createTicket(ctx, payload)
+}
+
 func (o *Orchestrator) createTicket(ctx context.Context, payload models.TicketRequest) (models.TicketResponse, error) {
 	body, err := json.Marshal(payload)
 	if err != nil {
@@ -561,15 +573,3 @@ func (o *Orchestrator) createTicket(ctx context.Context, payload models.TicketRe
 	return result, nil
 }
 
-func normalizeSeverity(value string) string {
-	switch strings.ToLower(strings.TrimSpace(value)) {
-	case "error":
-		return "high"
-	case "warning":
-		return "medium"
-	case "info":
-		return "low"
-	default:
-		return "unknown"
-	}
-}

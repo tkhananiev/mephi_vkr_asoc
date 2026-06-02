@@ -14,7 +14,7 @@ func WithAPIKeyOrUserJWT(apiKey string, jwtSecret []byte, next http.Handler) htt
 	want := []byte(key)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		p := r.URL.Path
-		if p == "/health" || p == "/openapi.yaml" {
+		if p == "/health" || p == "/metrics" || p == "/openapi.yaml" {
 			next.ServeHTTP(w, r)
 			return
 		}

@@ -1,2 +1,0 @@
-# После `gitlab-runner register` появится config.toml с токенами — не пушить в публичный репо.
-runner/config.toml

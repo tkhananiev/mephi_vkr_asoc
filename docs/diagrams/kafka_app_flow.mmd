@@ -1,11 +1,14 @@
 %% Поток с Kafka для ingest находок (compose с APP_KAFKA_BROKERS).
-%% Сканирование Semgrep: по умолчанию WebGoat (APP_DEFAULT_* у api-service), см. demo/scan-targets/README.md
+%% Сканирование: semgrep | gitleaks | trivy-sca | zap-dast через api-service.
 %% Рендер: Mermaid в VS Code / GitHub / diagrams.net (import)
 
 flowchart LR
   Client[HTTP клиент]
   API[api-service]
   SG[semgrep-service]
+  GL[gitleaks-service]
+  TV[trivy-sca-service]
+  ZP[zap-dast-service]
   K[Kafka<br/>asoc.findings.ingest<br/>asoc.findings.ingest.result]
   PR[processing-service]
   RD[reference-data-service]
@@ -14,7 +17,10 @@ flowchart LR
   DB[(PostgreSQL)]
 
   Client --> API
-  API -->|POST /api/v1/scan| SG
+  API --> SG
+  API --> GL
+  API --> TV
+  API --> ZP
   API -->|produce ingest| K
   K -->|consume| PR
   PR -->|produce result| K

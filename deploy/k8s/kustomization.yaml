@@ -10,8 +10,11 @@ resources:
   - kafka.yaml
   - bdu-catalog-pvc.yaml
   - api-pod-ops-rbac.yaml
+  - api-service-servicemonitor.yaml
   - workloads.yaml
-  - hpa.yaml
+  # hpa.yaml — отключён для сопоставимого НТ с Defect Dojo (1 реплика, без autoscale).
+  # Включить обратно: раскомментировать строку ниже и kubectl apply -f deploy/k8s/hpa.yaml
+  # - hpa.yaml
   - frontend.yaml
   - ingress.yaml
 

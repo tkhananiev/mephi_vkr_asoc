@@ -18,8 +18,9 @@ RUN curl -fsSL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEA
   && chmod +x /usr/local/bin/gitleaks
 
 COPY --from=builder /out/gitleaks-service /usr/local/bin/gitleaks-service
-COPY demo /app/demo
-RUN cd /app/demo/scan-targets && GIT_TERMINAL_PROMPT=0 git clone --depth 1 https://github.com/WebGoat/WebGoat.git \
+RUN mkdir -p /app/demo/scan-targets \
+  && cd /app/demo/scan-targets \
+  && GIT_TERMINAL_PROMPT=0 git clone --depth 1 https://github.com/WebGoat/WebGoat.git \
   && test -d WebGoat
 
 ENV APP_HTTP_PORT=8086

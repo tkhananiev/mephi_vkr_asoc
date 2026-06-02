@@ -115,3 +115,23 @@ type VulnerabilityReportRow struct {
 	CatalogSource   string     `json:"catalog_source,omitempty"`
 	RunChannel      string     `json:"run_channel,omitempty"`
 }
+
+// GroupJiraVulnerability — данные для полей задачи Jira по одной уязвимости в группе.
+type GroupJiraVulnerability struct {
+	VulnerabilityID   int64  `json:"vulnerability_id"`
+	AssetPath         string `json:"asset_path"`
+	CVE               string `json:"cve"`
+	BDUID             string `json:"bdu_id"`
+	CVEDescription    string `json:"cve_description"`
+	BDUDescription    string `json:"bdu_description"`
+	Criticality       string `json:"criticality"`
+	CriticalitySource string `json:"criticality_source"`
+}
+
+// GroupJiraContext — контекст группы для создания задачи в Jira.
+type GroupJiraContext struct {
+	GroupID         int64                    `json:"group_id"`
+	GroupKey        string                   `json:"group_key"`
+	SeverityMax     string                   `json:"severity_max"`
+	Vulnerabilities []GroupJiraVulnerability `json:"vulnerabilities"`
+}

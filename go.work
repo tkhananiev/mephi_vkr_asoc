@@ -10,4 +10,7 @@ use (
 	./services/reference-data-service
 	./services/semgrep-service
 	./services/gitleaks-service
+	./services/trivy-sca-service
+	./services/zap-dast-service
+	./services/findings-adapter-service
 )

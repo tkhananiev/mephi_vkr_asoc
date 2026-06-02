@@ -1,0 +1,241 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: mephi-vkr-postgres
+    environment:
+      POSTGRES_DB: asoc
+      POSTGRES_USER: asoc
+      POSTGRES_PASSWORD: asoc
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ../migrations:/docker-entrypoint-initdb.d
+
+  kafka:
+    image: apache/kafka:3.9.0
+    container_name: mephi-vkr-kafka
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+    ports:
+      - "9092:9092"
+
+  reference-data-service:
+    build:
+      context: ..
+      dockerfile: services/reference-data-service/Dockerfile
+    container_name: mephi-vkr-reference-data-service
+    restart: unless-stopped
+    environment:
+      APP_HTTP_PORT: "8081"
+      APP_POSTGRES_DSN: postgres://asoc:asoc@postgres:5432/asoc?sslmode=disable
+      APP_KAFKA_BROKERS: kafka:9092
+      APP_BDU_FEED_URL: https://bdu.fstec.ru/ubi/vul/rss
+      # Строгая проверка с deploy/certs часто ломается (ротация Sub CA → AKI/SKI mismatch). Для фида БДУ надёжнее пропуск проверки TLS.
+      APP_BDU_INSECURE_SKIP_VERIFY: "true"
+      APP_NVD_API_BASE_URL: https://services.nvd.nist.gov/rest/json/cves/2.0
+      APP_SYNC_SCHEDULER_ENABLED: "true"
+      APP_SYNC_INITIAL_DELAY: 1m
+      APP_SYNC_INTERVAL: 24h
+      # Офлайн БДУ: vulxml.zip и vullist.xlsx — каталог ../demo/bdu/ (рядом с репозиторием), volume:
+      #   - ../../demo/bdu:/bdu-import:ro
+      # и здесь:
+      # APP_BDU_VULXML_ZIP_PATH: /bdu-import/vulxml.zip
+      # APP_BDU_VULLIST_XLSX_PATH: /bdu-import/vullist.xlsx
+    depends_on:
+      - postgres
+      - kafka
+    ports:
+      - "8081:8081"
+
+  processing-service:
+    image: golang:1.23
+    container_name: mephi-vkr-processing-service
+    working_dir: /app/services/processing-service
+    command: sh -c "go mod download && go run ./cmd/processing-service"
+    environment:
+      APP_HTTP_PORT: "8082"
+      APP_POSTGRES_DSN: postgres://asoc:asoc@postgres:5432/asoc?sslmode=disable
+      APP_KAFKA_BROKERS: kafka:9092
+    volumes:
+      - ..:/app
+    depends_on:
+      - postgres
+      - kafka
+    ports:
+      - "8082:8082"
+
+  semgrep-service:
+    build:
+      context: ..
+      dockerfile: services/semgrep-service/Dockerfile
+    container_name: mephi-vkr-semgrep-service
+    environment:
+      APP_HTTP_PORT: "8085"
+      APP_SEMGREP_CONFIG: p/java
+      APP_DEFAULT_SCAN_TARGET_PATH: /app/demo/scan-targets/WebGoat/
+      APP_SEMGREP_GIT_WORK_ROOT: /var/asoc-semgrep-git
+    volumes:
+      - ../../demo:/app/demo:ro
+      - semgrep_git_workspace:/var/asoc-semgrep-git
+    ports:
+      - "8085:8085"
+
+  gitleaks-service:
+    build:
+      context: ..
+      dockerfile: services/gitleaks-service/Dockerfile
+    container_name: mephi-vkr-gitleaks-service
+    environment:
+      APP_HTTP_PORT: "8086"
+      APP_DEFAULT_SCAN_TARGET_PATH: /app/demo/scan-targets/WebGoat/
+      APP_GITLEAKS_GIT_WORK_ROOT: /var/asoc-gitleaks-git
+    volumes:
+      - ../../demo:/app/demo:ro
+      - gitleaks_git_workspace:/var/asoc-gitleaks-git
+    ports:
+      - "8086:8086"
+
+  trivy-sca-service:
+    build:
+      context: ..
+      dockerfile: services/trivy-sca-service/Dockerfile
+    container_name: mephi-vkr-trivy-sca-service
+    environment:
+      APP_HTTP_PORT: "8088"
+      APP_DEFAULT_SCAN_TARGET_PATH: /app/demo/scan-targets/WebGoat/
+      APP_TRIVY_GIT_WORK_ROOT: /var/asoc-trivy-git
+    volumes:
+      - ../../demo:/app/demo:ro
+      - trivy_git_workspace:/var/asoc-trivy-git
+    ports:
+      - "8088:8088"
+
+  zap-dast-service:
+    build:
+      context: ..
+      dockerfile: services/zap-dast-service/Dockerfile
+    container_name: mephi-vkr-zap-dast-service
+    environment:
+      APP_HTTP_PORT: "8089"
+      APP_ZAP_HOME: /zap
+      APP_ZAP_SCAN_TIMEOUT_MIN: "8"
+    ports:
+      - "8089:8089"
+
+  findings-adapter-service:
+    build:
+      context: ..
+      dockerfile: services/findings-adapter-service/Dockerfile
+    container_name: mephi-vkr-findings-adapter-service
+    environment:
+      APP_HTTP_PORT: "8090"
+    ports:
+      - "8090:8090"
+
+  api-service:
+    build:
+      context: ..
+      dockerfile: services/api-service/Dockerfile
+    container_name: mephi-vkr-api-service
+    environment:
+      APP_HTTP_PORT: "8080"
+      APP_PROCESSING_SERVICE_URL: http://processing-service:8082
+      APP_JIRA_SERVICE_URL: http://jira-integration-service:8083
+      APP_SEMGREP_SERVICE_URL: http://semgrep-service:8085
+      APP_GITLEAKS_SERVICE_URL: http://gitleaks-service:8086
+      APP_SCA_SERVICE_URL: http://trivy-sca-service:8088
+      APP_DAST_SERVICE_URL: http://zap-dast-service:8089
+      APP_FINDINGS_ADAPTER_URL: http://findings-adapter-service:8090
+      APP_KAFKA_BROKERS: kafka:9092
+      APP_DEFAULT_SCAN_TARGET_PATH: /app/demo/scan-targets/WebGoat/
+      APP_DEFAULT_SEMGREP_CONFIG: p/java
+      # Тот же ключ, что AUTH_JWT_SECRET у auth-service (≥32 символа)
+      APP_JWT_SECRET: ${APP_JWT_SECRET:-stand-jwt-secret-set-via-env-min-32-chars_}
+      APP_POSTGRES_DSN: postgres://asoc:asoc@postgres:5432/asoc?sslmode=disable
+      # Дополнительные сканеры (Atomic-admin) сохраняются в этом файле между рестартами.
+      APP_INTEGRATIONS_OVERLAY_PATH: /var/asoc-overlay/integration-overlay.json
+      # Опасно: только для dev compose; сокет хоста — полный доступ к Docker.
+      APP_DOCKER_OPS_ENABLED: ${APP_DOCKER_OPS_ENABLED:-true}
+      APP_DOCKER_CLI: docker
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - api_integration_overlay:/var/asoc-overlay
+    depends_on:
+      - kafka
+      - postgres
+      - processing-service
+      - jira-integration-service
+      - semgrep-service
+      - gitleaks-service
+      - findings-adapter-service
+      - trivy-sca-service
+      - zap-dast-service
+    ports:
+      - "8080:8080"
+
+  auth-service:
+    build:
+      context: ..
+      dockerfile: services/auth-service/Dockerfile
+    container_name: mephi-vkr-auth-service
+    environment:
+      AUTH_HTTP_PORT: "8091"
+      AUTH_POSTGRES_DSN: postgres://asoc:asoc@postgres:5432/asoc?sslmode=disable
+      AUTH_JWT_SECRET: ${APP_JWT_SECRET:-stand-jwt-secret-set-via-env-min-32-chars_}
+      AUTH_JWT_TTL: 168h
+      # Первый админ только если таблица authn.admins пуста:
+      AUTH_BOOTSTRAP_ADMIN_LOGIN: ${AUTH_BOOTSTRAP_ADMIN_LOGIN:-asoc-admin}
+      AUTH_BOOTSTRAP_ADMIN_PASSWORD: ${AUTH_BOOTSTRAP_ADMIN_PASSWORD:-change-me-admin-9}
+    depends_on:
+      - postgres
+    ports:
+      - "8091:8091"
+
+  jira-integration-service:
+    image: golang:1.23
+    container_name: mephi-vkr-jira-integration-service
+    working_dir: /app/services/jira-integration-service
+    command: sh -c "go mod download && go run ./cmd/jira-integration-service"
+    environment:
+      APP_HTTP_PORT: "8083"
+      APP_POSTGRES_DSN: postgres://asoc:asoc@postgres:5432/asoc?sslmode=disable
+      APP_JIRA_BASE_URL: http://jira-mock:8090
+      APP_JIRA_PROJECT_KEY: ASOC
+    volumes:
+      - ..:/app
+    depends_on:
+      - postgres
+      - jira-mock
+    ports:
+      - "8083:8083"
+
+  jira-mock:
+    image: golang:1.23
+    container_name: mephi-vkr-jira-mock
+    working_dir: /app/services/jira-mock
+    command: sh -c "go run ./cmd/jira-mock"
+    environment:
+      # Ссылки в ответе API (и в БД): подставь публичный URL хоста, иначе localhost
+      APP_JIRA_PUBLIC_BASE_URL: ${JIRA_PUBLIC_BASE_URL:-http://localhost:8090}
+    volumes:
+      - ..:/app
+    ports:
+      - "8090:8090"
+
+volumes:
+  postgres_data:
+  api_integration_overlay:
+  semgrep_git_workspace:
+  gitleaks_git_workspace:
+  trivy_git_workspace:

@@ -1,183 +1,116 @@
 # Архитектура `mephi_vkr_asoc`
 
-Документ описывает **реализованный в репозитории** контур: микросервисы, обмен по HTTP и Kafka, общую PostgreSQL и типовой сценарий «сканирование → обработка находок → корреляция со справочником → группы → тикет в Jira». Поднять стенд: `deploy/docker-compose.yml`, пошагово — `demo/DEMO.md`. Развёртывание в **Kubernetes**: `deploy/k8s` (Kustomize, Postgres + Kafka + те же сервисы; **api-service**: `APP_AUTH_API_KEY`, общий **`APP_JWT_SECRET`** с **`auth-service`**, **`APP_POSTGRES_DSN`** для продуктов консоли; см. `deploy/k8s/README.md`). Исходники диаграмм (Mermaid): `docs/diagrams/` (`system_overview.mmd`, `kafka_app_flow.mmd`, `kafka_read_write.mmd`).
-
-**Веб-клиент:** отдельный каталог **`mephi_vkr_asoc_front`** (React, TypeScript, Vite) — браузерный UI поверх тех же REST API: дашборд, запуск Semgrep, продукты консоли (сохранённые в БД по JWT), группы и отчёт по уязвимостям (проксируются через **api-service** с учётом пользователя). HTTP-запросы на относительные пути `/api/v1/...`; в dev **прокси Vite** (`vite.config.ts`) шлёт `8080` — **api-service** для `/scans`, `/console`, **`/groups`**, **`/report`**, **`/integrations`**, `/admin`; `8081` — sync по-прежнему; **`8082`** — только **`/findings`** (ингест напрямую в `processing` при необходимости отладки). Запуск: README в **`mephi_vkr_asoc_front`**. В **`docker-compose`** здесь поднимается только backend; UI — отдельно. Альтернатива — **`curl`/Postman** (`demo/DEMO.md`) и просмотр таблиц в **PostgreSQL**.
+Микросервисная система сбора результатов сканирования, нормализации находок, корреляции со справочниками CVE/БДУ и выгрузки в Jira. Локальный стенд: `deploy/compose.yaml`. Манифесты Kubernetes: `deploy/k8s/`. Веб-клиент: `mephi_vkr_asoc_front` (React + Vite).
 
 ---
 
 ## Обзор
 
-Система собирает результаты статического анализа (Semgrep), нормализует находки, сопоставляет их со справочниками **NVD/CVE** и **БДУ ФСТЭК** (данные лежат в БД), группирует уязвимости и создаёт задачи в Jira (на локальном стенде — через `jira-mock`). Для пользовательского сценария основная точка входа по HTTP — **`api-service`** (браузерный клиент в **`mephi_vkr_asoc_front`** или REST-клиент); остальные сервисы вызываются из него или работают по расписанию/из Kafka.
+Система принимает результаты **SAST** (Semgrep, Gitleaks), **SCA** (Trivy), **DAST** (OWASP ZAP), нормализует их в единый формат, сопоставляет со справочниками **NVD/CVE** и **БДУ ФСТЭК**, группирует уязвимости и создаёт задачи в Jira.
 
 ---
 
-## Микросервисы: роли
+## Микросервисы
 
 | Сервис | Назначение |
 |--------|------------|
-| **api-service** | Внешний HTTP API для сценария консоли: запуск Semgrep, передача находок в **processing** (HTTP или Kafka) с необязательным **`owner_user_id`** для пользователя JWT **`role=user`**, **`GET`**/**`POST /api/v1/console/products`** (таблица **`core.console_products`**, нужен **`APP_POSTGRES_DSN`**), **`GET`** групп и отчёта с **проксированием** в `processing-service` и фильтром по владельцу, создание тикета в **Jira**. |
-| **semgrep-service** | HTTP-обёртка над Semgrep: запуск анализа по путям к **файлам внутри своего контейнера** (`POST /api/v1/scan`). |
-| **reference-data-service** | Периодический и ручной синхрон справочников NVD и БДУ ФСТЭК в PostgreSQL (`catalog.*`, `raw.*`, `audit.*`). С **processing** по HTTP **не общается** — только через общие таблицы. |
-| **processing-service** | Ingest находок (HTTP и/или Kafka), нормализация, корреляция по CVE/CWE через SQL к `catalog.*`, группировка, запись в `core.*`. |
-| **jira-integration-service** | Создание задач в Jira REST, идемпотентные связи `group_id` ↔ тикет в `integration.ticket_links`. |
-| **jira-mock** | Упрощённая имитация Jira для локального контура. |
+| **api-service** | Внешний HTTP API: запуск сканов, каталог интеграций, продукты консоли, группы/отчёт, проксирование в processing и Jira. |
+| **semgrep-service** | SAST по файлам внутри контейнера (`POST /api/v1/scan`). |
+| **gitleaks-service** | Поиск секретов в репозитории/каталоге. |
+| **trivy-sca-service** | SCA: `trivy fs` по каталогу или после shallow clone. |
+| **zap-dast-service** | DAST: OWASP ZAP baseline по `target_url`. |
+| **reference-data-service** | Синхронизация NVD и БДУ ФСТЭК в PostgreSQL. Общается с processing только через БД. |
+| **processing-service** | Ingest находок (Kafka или HTTP), нормализация, корреляция по CVE/CWE, группировка. |
+| **jira-integration-service** | Создание задач в Jira, идемпотентные связи `group_id` ↔ тикет. |
+| **jira-mock** | Заглушка Jira для локального стенда. |
 
-Инфраструктура: **PostgreSQL** (одна БД, несколько схем), **Kafka** (брокер в compose; см. ниже).
+Инфраструктура: **PostgreSQL** (одна БД, несколько схем), **Kafka** (при заданном `APP_KAFKA_BROKERS`).
 
 ---
 
-## Взаимодействие и потоки (логика)
+## Потоки
 
-1. **Справочники** наполняются **независимо** от сканирования: `reference-data-service` пишет в БД; `processing-service` только **читает** `catalog.*` при корреляции.
-2. **Корреляция не через HTTP между справочником и обработкой**: оба сервиса смотрят в **одну БД**, чтобы не дублировать REST-контракт справочника и снизить связность.
-3. **Сквозной пользовательский сценарий** для браузера — через **nginx** входного UI и **api-service** (группы, отчёт, продукты, скан). **`processing-service`** и **`jira-integration-service`** можно дергать отдельно при отладке.
-
-### Общая схема контуров
-
-Сводка: два независимых направления — **справочники** (HTTPS → `reference-data-service` → БД) и **сканирование → обработка → тикеты** (через `api-service`; передача находок в `processing-service` — **предпочтительно Kafka**, иначе **прямой HTTP** `POST /api/v1/findings/ingest`, см. `APP_KAFKA_BROKERS`). Исходник: `diagrams/system_overview.mmd`.
+Два независимых направления:
+- **Справочники:** `reference-data-service` → БД (NVD, БДУ).
+- **Сканирование → тикеты:** клиент → `api-service` → executor → findings-adapter → **Kafka** (`asoc.findings.ingest`) или HTTP → `processing-service` → БД → `jira-integration-service`.
 
 ```mermaid
 flowchart TB
   subgraph ext["Внешний мир"]
-    U[Клиент / Postman / браузер]
+    U[Клиент / браузер]
   end
   subgraph scan["Сканирование и тикеты"]
     API["api-service :8080"]
     SEM["semgrep-service :8085"]
-    K["Kafka :9092<br/>ingest / ingest.result"]
+    GLS["gitleaks-service :8086"]
+    SCA["trivy-sca-service :8088"]
+    DAST["zap-dast-service :8089"]
+    K["Kafka :9092"]
     PROC["processing-service :8082"]
     JINT["jira-integration-service :8083"]
     MOCK["jira-mock :8090"]
   end
-  DB[("PostgreSQL :5432<br/>asoc")]
-  subgraph ref["Справочник CVE / БДУ"]
+  DB[("PostgreSQL :5432")]
+  subgraph ref["Справочник"]
     REF["reference-data-service :8081"]
     NVD["БДУ / NVD HTTPS"]
   end
 
   U -->|POST /api/v1/scans| API
-  API -->|POST /api/v1/scan| SEM
-  SEM -->|JSON находок| API
+  API --> SEM
+  API --> GLS
+  API --> SCA
+  API --> DAST
 
-  API -->|если APP_KAFKA_BROKERS| K
-  K -->|consume ingest| PROC
-  PROC -->|produce result| K
-  K -->|consume result| API
-  API -.->|иначе POST /api/v1/findings/ingest| PROC
-  PROC -->|core.* читает catalog.*| DB
-  API -->|proxy GET groups/report + ingest owner| PROC
-  API -->|console_products при APP_POSTGRES_DSN| DB
-  API -->|POST /api/v1/tickets| JINT
-  JINT -->|REST| MOCK
-  JINT -->|ticket_links| DB
+  API -->|Kafka или HTTP| K
+  K --> PROC
+  PROC --> DB
+  API -->|proxy groups/report| PROC
+  API -->|console_products| DB
+  API --> JINT
+  JINT --> MOCK
+  JINT --> DB
 
-  U -->|POST /api/v1/sync/…| REF
+  U --> REF
   REF --> NVD
-  REF -->|catalog, raw, audit| DB
-```
-
-### Упрощённый поток Kafka (ingest находок)
-
-Исходник `diagrams/kafka_app_flow.mmd`:
-
-```mermaid
-flowchart LR
-  Client[HTTP клиент]
-  API[api-service]
-  SG[semgrep-service]
-  K[Kafka<br/>asoc.findings.ingest<br/>asoc.findings.ingest.result]
-  PR[processing-service]
-  RD[reference-data-service]
-  JI[jira-integration-service]
-  JM[jira-mock]
-  DB[(PostgreSQL)]
-
-  Client --> API
-  API -->|POST /api/v1/scan| SG
-  API -->|produce ingest| K
-  K -->|consume| PR
-  PR -->|produce result| K
-  K -->|read reply| API
-  API -->|GET /groups| PR
-  RD -->|sync записи| DB
-  PR -->|чтение catalog, запись находок| DB
-  API -->|POST /tickets| JI
-  JI --> JM
-  JI --> DB
-```
-
-### Топики Kafka: producer / consumer
-
-Исходник `diagrams/kafka_read_write.mmd`:
-
-```mermaid
-flowchart TB
-  subgraph kafka_topics["Топики"]
-    ING["asoc.findings.ingest"]
-    RES["asoc.findings.ingest.result"]
-  end
-  API["api-service"]
-  PR["processing-service"]
-  RD["reference-data-service<br/>(нет producer/consumer)"]
-
-  API -->|"write"| ING
-  ING -->|"read, group processing-findings-ingest"| PR
-  PR -->|"write"| RES
-  RES -->|"read, reply по correlation_id"| API
+  REF --> DB
 ```
 
 ---
 
-## Kafka: зачем и как устроено
+## Kafka
 
-При ненулевом **`APP_KAFKA_BROKERS`** (в compose — `kafka:9092`; в K8s задайте **`APP_REQUIRE_KAFKA_FOR_FINDINGS_INGEST=true`**, чтобы без брокера `api-service` не поднимался):
+При заданном `APP_KAFKA_BROKERS` используется паттерн request-reply через два топика:
 
 | Топик | Роль |
 |-------|------|
-| **`asoc.findings.ingest`** | Пакет находок от `api-service`: есть `correlation_id` и JSON **`ingest`** (в том числе опционально **`owner_user_id`** для консольного пользователя). |
-| **`asoc.findings.ingest.result`** | Ответ `processing-service`: тот же `correlation_id` и результат пайплайна (или ошибка). |
+| `asoc.findings.ingest` | Пакет находок от `api-service` (с `correlation_id`). |
+| `asoc.findings.ingest.result` | Ответ `processing-service` (тот же `correlation_id`). |
 
-**Паттерн:** request-reply через два топика с одной партицией на топик: `api-service` **публикует** ingest и **ждёт** сообщение в `ingest.result` с тем же `correlation_id`; `processing-service` **потребляет** ingest (consumer group `processing-findings-ingest`), выполняет ту же бизнес-логику, что и внутри HTTP-обработчика (если он включён), и **публикует** результат.
+Без брокера `api-service` шлёт тот же JSON по HTTP `POST /api/v1/findings/ingest` на `processing-service` (HTTP ingest по умолчанию включён, когда Kafka не задана).
 
-**Если брокера нет** (локальный запуск): `api-service` шлёт тот же JSON **по HTTP** `POST /api/v1/findings/ingest` на `processing-service` — на `processing-service` тогда нужен включённый HTTP-ingest (по умолчанию **включён**, когда Kafka не задана).
-
-**HTTP** `POST /api/v1/findings/ingest` на `processing-service` при работающей Kafka: в compose **по умолчанию отключён**; **включить** для отладки: **`APP_HTTP_FINDINGS_INGEST=true`**.
-
-**Справочники:** `reference-data-service` подключает Kafka в конфиге, но публикация событий синка — **заглушка (noop, лог)**; на обмен находками это не влияет.
-
-Топики создаются при старте `api-service` и `processing-service` (`EnsureTopics`, 1 партиция, RF=1).
+Топики создаются при старте `api-service` и `processing-service` (1 партиция, RF=1).
 
 ---
 
-## Основной сценарий (end-to-end)
+## Сквозной сценарий
 
-1. Клиент вызывает `POST /api/v1/scans` на `api-service` с телом вроде `{"scanner_id":"semgrep", ...}` (цель и правила можно опустить — подставятся **`APP_DEFAULT_SCAN_TARGET_PATH`** и **`APP_DEFAULT_SEMGREP_CONFIG`** из compose). Устаревший вариант без `scanner_id`: `POST /api/v1/scans/semgrep` с прежним телом.
-2. `api-service` вызывает `POST /api/v1/scan` на `semgrep-service`, получает JSON находок.
-3. `api-service` передаёт пакет находок в **`processing-service`**: при Kafka — топики **`asoc.findings.ingest` → `asoc.findings.ingest.result`**, иначе — **`POST /api/v1/findings/ingest`**.
-4. `processing-service` пишет находки и уязвимости, **читает `catalog.*` в PostgreSQL** для сопоставления по CVE/CWE, выполняет группировку.
-5. `api-service` запрашивает группы списком у `processing-service` (**HTTP**, с заголовком владельца, если перед этим ingest шёл для JWT-пользователя), затем `POST /api/v1/tickets` у `jira-integration-service`.
-6. `jira-integration-service` обращается к Jira (на стенде — `jira-mock`), сохраняет связь в `integration.ticket_links`.
-
-Шаги 1–2 и 4–6 — синхронный HTTP; шаг 3 при включённом Kafka — **очередь + ответ в топике** (HTTP-запрос к `api-service` для клиента остаётся блокирующим до результата ingest). Очередь между processing и Jira **не используется**.
-
----
-
-## Semgrep: что сканируется
-
-Semgrep установлен в образе **`semgrep-service`**. Путь к коду — **внутри этого контейнера**; на хосте каталоги монтируются в `/app/demo/...`. Подробности целей: `demo/scan-targets/README.md`.
+1. Клиент вызывает `POST /api/v1/scans` с `scanner_id` (`semgrep`, `gitleaks`, `trivy-sca`, `zap-dast`).
+2. `api-service` вызывает executor, тот возвращает сырой отчёт; `findings-adapter-service` нормализует его в `[]ProcessingFindingItem`.
+3. Пакет уходит в `processing-service` через Kafka или HTTP.
+4. `processing-service` пишет находки, сопоставляет с `catalog.*`, выполняет группировку.
+5. `api-service` запрашивает группы у `processing-service`, затем создаёт тикеты через `jira-integration-service`.
 
 ---
 
 ## Синхронизация справочников
 
-- По расписанию (по умолчанию раз в **24h**, первый запуск с задержкой **1m**): `APP_SYNC_SCHEDULER_ENABLED`, `APP_SYNC_INITIAL_DELAY`, `APP_SYNC_INTERVAL`.
-- Ручной запуск через REST `reference-data-service` (`/api/v1/sync/...`, в т.ч. полный импорт ФСТЭК `POST …/sync/bdu/bulk` из `vulxml.zip` + `vullist.xlsx` при настроенных URL или локальных путях).
-- После успешного синка вызывается noop-публикация в Kafka (место под будущие события).
+- По расписанию раз в 24h (первый запуск с задержкой 1m): `APP_SYNC_SCHEDULER_ENABLED`, `APP_SYNC_INITIAL_DELAY`, `APP_SYNC_INTERVAL`.
+- Ручной запуск через REST `reference-data-service` (`/api/v1/sync/...`).
 
 ---
 
-## Порты (`docker-compose`)
+## Порты (локально)
 
 | Сервис | Порт |
 |--------|------|
@@ -186,16 +119,10 @@ Semgrep установлен в образе **`semgrep-service`**. Путь к 
 | processing-service | 8082 |
 | jira-integration-service | 8083 |
 | semgrep-service | 8085 |
+| gitleaks-service | 8086 |
+| trivy-sca-service | 8088 |
+| zap-dast-service | 8089 |
 | jira-mock | 8090 |
 | Kafka | 9092 |
 
-Переменные окружения: **`docs/ENVIRONMENT.md`**. Таблицы БД и матрица «кто куда пишет»: **`docs/SERVICES_AND_DATA.md`** и **`docs/DATABASE.md`**.
-
----
-
-## Дальнейшее развитие (идеи, не текущий scope)
-
-- Расширение веб-клиента (`mephi_vkr_asoc_front`): новые экраны, роли пользователей, углублённая работа с находками и отчётами.
-- Публичная спецификация API (OpenAPI/Swagger) для `api-service`.
-- Аутентификация и разграничение доступа к внешнему API.
-- Расширение Kafka: события синхронизации справочников, групп, тикетов вместо noop; при необходимости — полностью асинхронный API без reply-топика.
+Переменные окружения: `docs/ENVIRONMENT.md`. Таблицы БД: `docs/SERVICES_AND_DATA.md` и `docs/DATABASE.md`.

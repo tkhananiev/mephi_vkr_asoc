@@ -92,7 +92,10 @@ metadata:
   namespace: asoc
 spec:
   strategy:
-    type: Recreate
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 1
   replicas: 1
   selector:
     matchLabels:
@@ -120,6 +123,10 @@ spec:
                   key: postgres-dsn
             - name: APP_KAFKA_BROKERS
               value: kafka:9092
+            - name: APP_KAFKA_INGEST_PARTITIONS
+              value: "6"
+            - name: APP_KAFKA_RESULT_PARTITIONS
+              value: "1"
           readinessProbe:
             httpGet:
               path: /health
@@ -243,6 +250,169 @@ spec:
             httpGet:
               path: /health
               port: 8086
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: trivy-sca-service
+  namespace: asoc
+spec:
+  ports:
+    - port: 8088
+      targetPort: 8088
+  selector:
+    app: trivy-sca-service
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: trivy-sca-service
+  namespace: asoc
+spec:
+  strategy:
+    type: Recreate
+  replicas: 1
+  selector:
+    matchLabels:
+      app: trivy-sca-service
+  template:
+    metadata:
+      labels:
+        app: trivy-sca-service
+    spec:
+      imagePullSecrets:
+        - name: selcloud-registry
+      volumes:
+        - name: trivy-git-work
+          emptyDir: {}
+      containers:
+        - name: app
+          image: cr.selcloud.ru/atomic-asoc/trivy-sca:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8088
+          env:
+            - name: APP_HTTP_PORT
+              value: "8088"
+            - name: APP_DEFAULT_SCAN_TARGET_PATH
+              value: /app/demo/scan-targets/WebGoat/
+            - name: APP_TRIVY_GIT_WORK_ROOT
+              value: /var/asoc-trivy-git
+          volumeMounts:
+            - name: trivy-git-work
+              mountPath: /var/asoc-trivy-git
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8088
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: zap-dast-service
+  namespace: asoc
+spec:
+  ports:
+    - port: 8089
+      targetPort: 8089
+  selector:
+    app: zap-dast-service
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: zap-dast-service
+  namespace: asoc
+spec:
+  strategy:
+    type: Recreate
+  replicas: 1
+  selector:
+    matchLabels:
+      app: zap-dast-service
+  template:
+    metadata:
+      labels:
+        app: zap-dast-service
+    spec:
+      imagePullSecrets:
+        - name: selcloud-registry
+      containers:
+        - name: app
+          image: cr.selcloud.ru/atomic-asoc/zap-dast:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8089
+          env:
+            - name: APP_HTTP_PORT
+              value: "8089"
+            - name: APP_ZAP_HOME
+              value: /zap
+            - name: APP_ZAP_SCAN_TIMEOUT_MIN
+              value: "8"
+          resources:
+            requests:
+              memory: 1536Mi
+              cpu: 250m
+            limits:
+              memory: 3Gi
+              cpu: "2"
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8089
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: findings-adapter-service
+  namespace: asoc
+spec:
+  ports:
+    - port: 8090
+      targetPort: 8090
+  selector:
+    app: findings-adapter-service
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: findings-adapter-service
+  namespace: asoc
+spec:
+  strategy:
+    type: Recreate
+  replicas: 1
+  selector:
+    matchLabels:
+      app: findings-adapter-service
+  template:
+    metadata:
+      labels:
+        app: findings-adapter-service
+    spec:
+      imagePullSecrets:
+        - name: selcloud-registry
+      containers:
+        - name: app
+          image: cr.selcloud.ru/atomic-asoc/findings-adapter:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8090
+          env:
+            - name: APP_HTTP_PORT
+              value: "8090"
+          resources:
+            requests:
+              memory: 64Mi
+              cpu: 50m
+            limits:
+              memory: 256Mi
+              cpu: 500m
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8090
 ---
 apiVersion: v1
 kind: Service
@@ -492,9 +662,12 @@ kind: Service
 metadata:
   name: api-service
   namespace: asoc
+  labels:
+    app: api-service
 spec:
   ports:
-    - port: 8080
+    - name: http
+      port: 8080
       targetPort: 8080
   selector:
     app: api-service
@@ -543,8 +716,18 @@ spec:
               value: http://semgrep-service:8085
             - name: APP_GITLEAKS_SERVICE_URL
               value: http://gitleaks-service:8086
+            - name: APP_SCA_SERVICE_URL
+              value: http://trivy-sca-service:8088
+            - name: APP_DAST_SERVICE_URL
+              value: http://zap-dast-service:8089
+            - name: APP_FINDINGS_ADAPTER_URL
+              value: http://findings-adapter-service:8090
             - name: APP_KAFKA_BROKERS
               value: kafka:9092
+            - name: APP_KAFKA_INGEST_PARTITIONS
+              value: "6"
+            - name: APP_KAFKA_RESULT_PARTITIONS
+              value: "1"
             - name: APP_REQUIRE_KAFKA_FOR_FINDINGS_INGEST
               value: "true"
             - name: APP_DEFAULT_SCAN_TARGET_PATH

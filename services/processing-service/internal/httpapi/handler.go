@@ -32,6 +32,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
 		mux.HandleFunc("/api/v1/findings/ingest", h.handleIngest)
 	}
 	mux.HandleFunc("/api/v1/groups", h.handleGroups)
+	mux.HandleFunc("/api/v1/groups/", h.handleGroups)
 	mux.HandleFunc("/api/v1/report/vulnerabilities", h.handleReportVulnerabilities)
 }
 
@@ -61,16 +62,32 @@ func (h *Handler) handleIngest(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) handleGroups(w http.ResponseWriter, r *http.Request) {
+	path := strings.TrimPrefix(r.URL.Path, "/api/v1/groups")
+	path = strings.Trim(path, "/")
+	if path != "" {
+		segments := strings.Split(path, "/")
+		groupIDRaw := segments[0]
+		if len(segments) == 2 && segments[1] == "jira-context" {
+			h.handleGroupJiraContext(w, r, groupIDRaw)
+			return
+		}
+		h.handleGroupByID(w, r, groupIDRaw)
+		return
+	}
 	if r.Method != http.MethodGet {
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
 		return
 	}
 
-	limit := 20
+	limit := 50
 	if raw := r.URL.Query().Get("limit"); raw != "" {
-		if parsed, err := strconv.Atoi(raw); err == nil && parsed > 0 && parsed <= 100 {
+		if parsed, err := strconv.Atoi(raw); err == nil && parsed > 0 && parsed <= 500 {
 			limit = parsed
 		}
+	}
+	statusFilter := strings.TrimSpace(r.URL.Query().Get("status"))
+	if statusFilter == "" {
+		statusFilter = "open"
 	}
 
 	cp, cpErr := parseConsoleProductFilter(r)
@@ -84,12 +101,78 @@ func (h *Handler) handleGroups(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	groups, err := h.processingService.ListGroups(r.Context(), limit, owner, cp)
+	groups, err := h.processingService.ListGroups(r.Context(), limit, owner, cp, statusFilter)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
 	writeJSON(w, http.StatusOK, groups)
+}
+
+func (h *Handler) handleGroupJiraContext(w http.ResponseWriter, r *http.Request, idRaw string) {
+	if r.Method != http.MethodGet {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		return
+	}
+	groupID, err := strconv.ParseInt(idRaw, 10, 64)
+	if err != nil || groupID <= 0 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid group id"})
+		return
+	}
+	cp, cpErr := parseConsoleProductFilter(r)
+	if cpErr != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": *cpErr})
+		return
+	}
+	owner := parseOwnerHeader(r)
+	if cp != nil && owner == nil {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "console_product_id requires X-ASOC-Console-User-ID"})
+		return
+	}
+	ctx, err := h.processingService.GetGroupJiraContext(r.Context(), groupID, owner, cp)
+	if err != nil {
+		if strings.Contains(err.Error(), "not found") || strings.Contains(err.Error(), "forbidden") {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, ctx)
+}
+
+func (h *Handler) handleGroupByID(w http.ResponseWriter, r *http.Request, idRaw string) {
+	if r.Method != http.MethodPatch {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		return
+	}
+	groupID, err := strconv.ParseInt(idRaw, 10, 64)
+	if err != nil || groupID <= 0 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid group id"})
+		return
+	}
+	var body struct {
+		Status string `json:"status"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json body"})
+		return
+	}
+	owner := parseOwnerHeader(r)
+	updated, err := h.processingService.UpdateGroupStatus(r.Context(), groupID, body.Status, owner)
+	if err != nil {
+		if strings.Contains(err.Error(), "not found") || strings.Contains(err.Error(), "forbidden") {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
+			return
+		}
+		if strings.Contains(err.Error(), "invalid status") {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, updated)
 }
 
 func (h *Handler) handleReportVulnerabilities(w http.ResponseWriter, r *http.Request) {

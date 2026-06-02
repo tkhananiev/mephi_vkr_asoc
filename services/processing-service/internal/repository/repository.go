@@ -7,6 +7,7 @@ import (
 )
 
 type ProcessingRepository interface {
+	PurgeScannerScope(ctx context.Context, scannerName string, ownerUserID *int64, consoleProductID *int64) error
 	StartRun(ctx context.Context, sourceName string, findingsReceived int, ownerUserID *int64, channel string, consoleProductID *int64) (int64, error)
 	FinishRun(ctx context.Context, runID int64, status string, result models.ProcessingResult, errMsg *string) error
 	InsertFinding(ctx context.Context, finding models.Finding) (int64, error)
@@ -19,6 +20,8 @@ type ProcessingRepository interface {
 	LinkFindingToVulnerability(ctx context.Context, findingID, vulnerabilityID int64) error
 	UpsertGroup(ctx context.Context, groupKey, severity, groupingRule string) (int64, bool, error)
 	LinkGroupToVulnerability(ctx context.Context, groupID, vulnerabilityID int64) error
-	ListGroups(ctx context.Context, limit int, ownerUserID *int64, consoleProductID *int64) ([]models.VulnerabilityGroup, error)
+	ListGroups(ctx context.Context, limit int, ownerUserID *int64, consoleProductID *int64, statusFilter string) ([]models.VulnerabilityGroup, error)
+	UpdateGroupStatus(ctx context.Context, groupID int64, status string, ownerUserID *int64) (models.VulnerabilityGroup, error)
 	ListVulnerabilityReport(ctx context.Context, limit int, ownerUserID *int64, consoleProductID *int64, filter *models.VulnerabilityReportFilter) ([]models.VulnerabilityReportRow, error)
+	GetGroupJiraContext(ctx context.Context, groupID int64, ownerUserID *int64, consoleProductID *int64) (models.GroupJiraContext, error)
 }

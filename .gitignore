@@ -35,11 +35,5 @@ go.work.sum
 .DS_Store
 **/.DS_Store
 
-# Клонируемые цели SAST (не коммитим)
-demo/scan-targets/WebGoat/
-
-# Сценарий видео с реальным IP стенда — только локально
-demo/VIDEO_SCRIPT.md
-
 # K8s секреты (копия с secret.example.yaml)
 deploy/k8s/secret.yaml

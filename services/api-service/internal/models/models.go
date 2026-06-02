@@ -4,6 +4,7 @@ import "encoding/json"
 
 type ScanRequest struct {
 	TargetPath       string `json:"target_path"`
+	TargetURL        string `json:"target_url,omitempty"`
 	ScannerName      string `json:"scanner_name"`
 	SemgrepConfig    string `json:"semgrep_config,omitempty"`
 	GitRepositoryURL string `json:"git_repository_url,omitempty"`
@@ -18,6 +19,7 @@ type ScanRequest struct {
 type UnifiedScanRequest struct {
 	ScannerID        string `json:"scanner_id"`
 	TargetPath       string `json:"target_path,omitempty"`
+	TargetURL        string `json:"target_url,omitempty"`
 	ScannerName      string `json:"scanner_name,omitempty"`
 	SemgrepConfig    string `json:"semgrep_config,omitempty"`
 	GitRepositoryURL string `json:"git_repository_url,omitempty"`
@@ -31,6 +33,7 @@ type UnifiedScanRequest struct {
 func (u UnifiedScanRequest) ToScanRequest() ScanRequest {
 	return ScanRequest{
 		TargetPath:       u.TargetPath,
+		TargetURL:        u.TargetURL,
 		ScannerName:      u.ScannerName,
 		SemgrepConfig:    u.SemgrepConfig,
 		GitRepositoryURL: u.GitRepositoryURL,
@@ -100,12 +103,38 @@ type ProcessingResponse struct {
 	GroupsUpdated          int   `json:"groups_updated"`
 }
 
+// IngestAcceptedResponse — немедленный ответ публичного ingest при Kafka (обработка в фоне).
+type IngestAcceptedResponse struct {
+	Status         string `json:"status"`
+	CorrelationID  string `json:"correlation_id"`
+	FindingsQueued int    `json:"findings_queued"`
+}
+
+type TicketVulnerabilityDetail struct {
+	VulnerabilityID   int64  `json:"vulnerability_id,omitempty"`
+	AssetPath         string `json:"asset_path"`
+	CVE               string `json:"cve"`
+	BDUID             string `json:"bdu_id"`
+	CVEDescription    string `json:"cve_description"`
+	BDUDescription    string `json:"bdu_description"`
+	Criticality       string `json:"criticality"`
+	CriticalitySource string `json:"criticality_source"`
+}
+
 type TicketRequest struct {
-	GroupID        int64  `json:"group_id"`
-	GroupKey       string `json:"group_key"`
-	Severity       string `json:"severity"`
-	AssetsCount    int    `json:"assets_count"`
-	CorrelationRef string `json:"correlation_ref"`
+	GroupID         int64                       `json:"group_id"`
+	GroupKey        string                      `json:"group_key"`
+	Severity        string                      `json:"severity"`
+	AssetsCount     int                         `json:"assets_count"`
+	CorrelationRef  string                      `json:"correlation_ref"`
+	Vulnerabilities []TicketVulnerabilityDetail `json:"vulnerabilities,omitempty"`
+}
+
+type GroupJiraContext struct {
+	GroupID         int64                       `json:"group_id"`
+	GroupKey        string                      `json:"group_key"`
+	SeverityMax     string                      `json:"severity_max"`
+	Vulnerabilities []TicketVulnerabilityDetail `json:"vulnerabilities"`
 }
 
 type TicketResponse struct {

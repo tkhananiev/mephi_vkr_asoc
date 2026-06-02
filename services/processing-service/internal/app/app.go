@@ -30,7 +30,7 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 	processingService := service.New(repo)
 
 	if cfg.KafkaIngestEnabled {
-		if err := pkgkafka.EnsureTopics(ctx, cfg.KafkaBrokers, cfg.KafkaTopicIngest, cfg.KafkaTopicResult); err != nil {
+		if err := pkgkafka.EnsureTopics(ctx, cfg.KafkaBrokers, cfg.KafkaTopicIngest, cfg.KafkaIngestPartitions, cfg.KafkaTopicResult, cfg.KafkaResultPartitions); err != nil {
 			return nil, fmt.Errorf("kafka ensure topics: %w", err)
 		}
 		cons := pkgkafka.NewIngestConsumer(cfg.KafkaBrokers, cfg.KafkaTopicIngest, cfg.KafkaTopicResult, processingService)

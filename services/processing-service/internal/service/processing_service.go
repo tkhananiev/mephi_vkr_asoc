@@ -20,7 +20,14 @@ func New(repo repository.ProcessingRepository) *ProcessingService {
 
 func (s *ProcessingService) ProcessFindings(ctx context.Context, request models.IngestRequest) (models.ProcessingResult, error) {
 	owner := ingestOwner(request)
-	runID, err := s.repo.StartRun(ctx, request.ScannerName, len(request.Findings), owner, normalizeRunChannel(request.Channel), request.ConsoleProductID)
+	scanner := strings.TrimSpace(request.ScannerName)
+	if scanner == "" {
+		return models.ProcessingResult{}, fmt.Errorf("scanner_name is required")
+	}
+	if err := s.repo.PurgeScannerScope(ctx, scanner, owner, request.ConsoleProductID); err != nil {
+		return models.ProcessingResult{}, fmt.Errorf("purge prior scanner data: %w", err)
+	}
+	runID, err := s.repo.StartRun(ctx, scanner, len(request.Findings), owner, normalizeRunChannel(request.Channel), request.ConsoleProductID)
 	if err != nil {
 		return models.ProcessingResult{}, err
 	}
@@ -49,7 +56,7 @@ func (s *ProcessingService) ProcessFindings(ctx context.Context, request models.
 		normalizedIdentifier := normalizeIdentifier(item, effectiveCVE)
 		findingID, err := s.repo.InsertFinding(ctx, models.Finding{
 			ProcessingRunID:      runID,
-			ScannerName:          request.ScannerName,
+			ScannerName:          scanner,
 			AssetID:              item.AssetID,
 			RawIdentifier:        item.Identifier,
 			NormalizedIdentifier: normalizedIdentifier,
@@ -122,12 +129,33 @@ func (s *ProcessingService) ProcessFindings(ctx context.Context, request models.
 	return result, nil
 }
 
-func (s *ProcessingService) ListGroups(ctx context.Context, limit int, ownerUserID *int64, consoleProductID *int64) ([]models.VulnerabilityGroup, error) {
-	return s.repo.ListGroups(ctx, limit, ownerUserID, consoleProductID)
+func (s *ProcessingService) ListGroups(ctx context.Context, limit int, ownerUserID *int64, consoleProductID *int64, statusFilter string) ([]models.VulnerabilityGroup, error) {
+	return s.repo.ListGroups(ctx, limit, ownerUserID, consoleProductID, statusFilter)
+}
+
+var allowedGroupStatuses = map[string]struct{}{
+	"open":            {},
+	"false_positive":  {},
+	"risk_accepted":   {},
+}
+
+func (s *ProcessingService) UpdateGroupStatus(ctx context.Context, groupID int64, status string, ownerUserID *int64) (models.VulnerabilityGroup, error) {
+	normalized := strings.ToLower(strings.TrimSpace(status))
+	if _, ok := allowedGroupStatuses[normalized]; !ok {
+		return models.VulnerabilityGroup{}, fmt.Errorf("invalid status: allowed open, false_positive, risk_accepted")
+	}
+	if groupID <= 0 {
+		return models.VulnerabilityGroup{}, fmt.Errorf("invalid group id")
+	}
+	return s.repo.UpdateGroupStatus(ctx, groupID, normalized, ownerUserID)
 }
 
 func (s *ProcessingService) ListVulnerabilityReport(ctx context.Context, limit int, ownerUserID *int64, consoleProductID *int64, filter *models.VulnerabilityReportFilter) ([]models.VulnerabilityReportRow, error) {
 	return s.repo.ListVulnerabilityReport(ctx, limit, ownerUserID, consoleProductID, filter)
+}
+
+func (s *ProcessingService) GetGroupJiraContext(ctx context.Context, groupID int64, ownerUserID *int64, consoleProductID *int64) (models.GroupJiraContext, error) {
+	return s.repo.GetGroupJiraContext(ctx, groupID, ownerUserID, consoleProductID)
 }
 
 func (s *ProcessingService) resolveCatalogRef(ctx context.Context, item models.FindingDTO) (refID *int64, correlationStatus string) {

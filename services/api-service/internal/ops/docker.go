@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-// Имена контейнеров из deploy/docker-compose.yml (учебный стенд).
+// Имена контейнеров из deploy/compose.yaml (локально).
 var composeContainerByService = map[string]string{
 	"api":  "mephi-vkr-api-service",
 	"auth": "mephi-vkr-auth-service",
@@ -17,6 +17,10 @@ var composeContainerByService = map[string]string{
 	"jir":  "mephi-vkr-jira-integration-service",
 	"sem":  "mephi-vkr-semgrep-service",
 	"gls":  "mephi-vkr-gitleaks-service",
+	"sca":  "mephi-vkr-trivy-sca-service",
+	"trivy": "mephi-vkr-trivy-sca-service",
+	"zap":  "mephi-vkr-zap-dast-service",
+	"dast": "mephi-vkr-zap-dast-service",
 }
 
 const maxLogBytes = 512 * 1024

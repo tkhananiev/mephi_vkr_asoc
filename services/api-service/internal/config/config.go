@@ -2,6 +2,7 @@ package config
 
 import (
 	"os"
+	"strconv"
 	"strings"
 )
 
@@ -11,9 +12,14 @@ type Config struct {
 	JiraServiceURL          string
 	SemgrepServiceURL       string
 	GitleaksServiceURL      string
+	ScaServiceURL           string
+	DastServiceURL          string
+	FindingsAdapterURL      string
 	KafkaBrokers            []string
 	KafkaTopicIngest        string
 	KafkaTopicResult        string
+	KafkaIngestPartitions   int
+	KafkaResultPartitions   int
 	DefaultScanTargetPath   string
 	DefaultSemgrepConfig    string
 	AuthAPIKey              string
@@ -30,7 +36,7 @@ type Config struct {
 	DockerOpsEnabled bool
 	DockerCLIPath    string
 
-	// Kubernetes: логи подов и rollout restart деплоев (нужен RBAC и ServiceAccount). Приоритетнее Docker.
+	// Оркестратор: логи подов и rollout restart деплоев (нужен RBAC и ServiceAccount). Приоритетнее Docker CLI.
 	K8SOpsEnabled   bool
 	K8SNamespace    string
 	K8SPodContainer string // обычно app (см. workloads.yaml)
@@ -46,9 +52,14 @@ func Load() Config {
 		JiraServiceURL:          getEnv("APP_JIRA_SERVICE_URL", "http://localhost:8083"),
 		SemgrepServiceURL:       getEnv("APP_SEMGREP_SERVICE_URL", "http://localhost:8085"),
 		GitleaksServiceURL:      getEnv("APP_GITLEAKS_SERVICE_URL", "http://localhost:8086"),
+		ScaServiceURL:           getEnv("APP_SCA_SERVICE_URL", "http://localhost:8088"),
+		DastServiceURL:          getEnv("APP_DAST_SERVICE_URL", "http://localhost:8089"),
+		FindingsAdapterURL:      getEnv("APP_FINDINGS_ADAPTER_URL", "http://localhost:8090"),
 		KafkaBrokers:            splitCSV(getEnv("APP_KAFKA_BROKERS", "")),
 		KafkaTopicIngest:        getEnv("APP_KAFKA_TOPIC_FINDINGS_INGEST", "asoc.findings.ingest"),
 		KafkaTopicResult:        getEnv("APP_KAFKA_TOPIC_FINDINGS_RESULT", "asoc.findings.ingest.result"),
+		KafkaIngestPartitions:   getIntEnv("APP_KAFKA_INGEST_PARTITIONS", 6),
+		KafkaResultPartitions:   getIntEnv("APP_KAFKA_RESULT_PARTITIONS", 1),
 		DefaultScanTargetPath:   getEnv("APP_DEFAULT_SCAN_TARGET_PATH", "/app/demo/scan-targets/WebGoat/"),
 		DefaultSemgrepConfig:    getEnv("APP_DEFAULT_SEMGREP_CONFIG", "p/java"),
 		AuthAPIKey:              os.Getenv("APP_AUTH_API_KEY"),
@@ -93,6 +104,18 @@ func splitCSV(s string) []string {
 		}
 	}
 	return out
+}
+
+func getIntEnv(key string, fallback int) int {
+	v := strings.TrimSpace(os.Getenv(key))
+	if v == "" {
+		return fallback
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil || n < 1 {
+		return fallback
+	}
+	return n
 }
 
 func getEnv(key, fallback string) string {

@@ -12,38 +12,15 @@
       "fieldConfig": {
         "defaults": {
           "color": {"mode": "thresholds"},
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {"color": "blue", "value": null},
-              {"color": "orange", "value": 1},
-              {"color": "red", "value": 5}
-            ]
-          },
-          "unit": "none"
-        },
-        "overrides": []
-      },
-      "gridPos": {"h": 4, "w": 6, "x": 0, "y": 0},
-      "id": 1,
-      "options": {
-        "colorMode": "value",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false},
-        "textMode": "auto"
-      },
-      "pluginVersion": "10.0.0",
-      "targets": [
-        {
-          "datasource": {"type": "prometheus", "uid": "prometheus"},
-          "expr": "kube_horizontalpodautoscaler_status_current_replicas{namespace=\"asoc\", horizontalpodautoscaler=\"api-service\"}",
-          "refId": "A"
+          "thresholds": {"mode": "absolute", "steps": [{"color": "blue", "value": null}]},
+          "unit": "reqps"
         }
-      ],
-      "title": "HPA текущие реплики — api-service",
+      },
+      "gridPos": {"h": 6, "w": 12, "x": 0, "y": 0},
+      "id": 9,
+      "options": {"colorMode": "value", "graphMode": "area", "reduceOptions": {"calcs": ["lastNotNull"]}, "text": {"titleSize": 14, "valueSize": 42}},
+      "targets": [{"expr": "sum(rate(asoc_http_requests_total{route=\"/api/v1/findings/ingest\", code=\"202\"}[2m]))", "legendFormat": "202", "refId": "A"}],
+      "title": "202 req/s",
       "type": "stat"
     },
     {
@@ -51,38 +28,15 @@
       "fieldConfig": {
         "defaults": {
           "color": {"mode": "thresholds"},
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {"color": "blue", "value": null},
-              {"color": "orange", "value": 1},
-              {"color": "red", "value": 5}
-            ]
-          },
-          "unit": "none"
-        },
-        "overrides": []
-      },
-      "gridPos": {"h": 4, "w": 6, "x": 6, "y": 0},
-      "id": 2,
-      "options": {
-        "colorMode": "value",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false},
-        "textMode": "auto"
-      },
-      "pluginVersion": "10.0.0",
-      "targets": [
-        {
-          "datasource": {"type": "prometheus", "uid": "prometheus"},
-          "expr": "kube_horizontalpodautoscaler_status_current_replicas{namespace=\"asoc\", horizontalpodautoscaler=\"processing-service\"}",
-          "refId": "A"
+          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "red", "value": 0.01}]},
+          "unit": "reqps"
         }
-      ],
-      "title": "HPA текущие реплики — processing-service",
+      },
+      "gridPos": {"h": 6, "w": 12, "x": 12, "y": 0},
+      "id": 8,
+      "options": {"colorMode": "value", "graphMode": "area", "reduceOptions": {"calcs": ["lastNotNull"]}, "text": {"titleSize": 14, "valueSize": 42}},
+      "targets": [{"expr": "sum(rate(asoc_http_requests_total{route=\"/api/v1/findings/ingest\", code=~\"5..\"}[2m]))", "legendFormat": "5xx", "refId": "A"}],
+      "title": "5xx req/s",
       "type": "stat"
     },
     {
@@ -90,121 +44,110 @@
       "fieldConfig": {
         "defaults": {
           "color": {"mode": "palette-classic"},
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "drawStyle": "line",
-            "fillOpacity": 25,
-            "lineWidth": 2,
-            "pointSize": 5,
-            "showPoints": "never",
-            "spanNulls": false
-          },
-          "mappings": [],
-          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}]},
-          "unit": "cores"
+          "custom": {"drawStyle": "line", "fillOpacity": 35, "lineWidth": 2, "stacking": {"group": "A", "mode": "normal"}},
+          "unit": "reqps"
         },
-        "overrides": []
+        "overrides": [
+          {"matcher": {"id": "byRegexp", "options": ".*202.*"}, "properties": [{"id": "color", "value": {"fixedColor": "green", "mode": "fixed"}}]},
+          {"matcher": {"id": "byRegexp", "options": ".*502.*"}, "properties": [{"id": "color", "value": {"fixedColor": "orange", "mode": "fixed"}}]},
+          {"matcher": {"id": "byRegexp", "options": ".*500.*"}, "properties": [{"id": "color", "value": {"fixedColor": "red", "mode": "fixed"}}]}
+        ]
       },
-      "gridPos": {"h": 9, "w": 12, "x": 0, "y": 4},
+      "gridPos": {"h": 10, "w": 24, "x": 0, "y": 6},
+      "id": 6,
+      "options": {"legend": {"displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [{"expr": "sum(rate(asoc_http_requests_total{route=\"/api/v1/findings/ingest\"}[2m])) by (code)", "legendFormat": "HTTP {{code}}", "refId": "A"}],
+      "title": "Пропускная способность — req/s по коду ответа",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [{"color": "blue", "value": null}, {"color": "yellow", "value": 2000}, {"color": "red", "value": 8000}]},
+          "unit": "ms"
+        }
+      },
+      "gridPos": {"h": 5, "w": 12, "x": 0, "y": 16},
+      "id": 14,
+      "options": {"colorMode": "value", "graphMode": "area", "reduceOptions": {"calcs": ["lastNotNull"]}, "text": {"titleSize": 14, "valueSize": 46}},
+      "targets": [{"expr": "1000 * sum(rate(asoc_http_request_duration_seconds_sum{route=\"/api/v1/findings/ingest\"}[2m])) / sum(rate(asoc_http_request_duration_seconds_count{route=\"/api/v1/findings/ingest\"}[2m]))", "legendFormat": "avg", "refId": "A"}],
+      "title": "avg латентность, мс",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [{"color": "blue", "value": null}, {"color": "yellow", "value": 3000}, {"color": "red", "value": 10000}]},
+          "unit": "ms"
+        }
+      },
+      "gridPos": {"h": 5, "w": 12, "x": 12, "y": 16},
+      "id": 16,
+      "options": {"colorMode": "value", "graphMode": "area", "reduceOptions": {"calcs": ["lastNotNull"]}, "text": {"titleSize": 14, "valueSize": 46}},
+      "targets": [{"expr": "1000 * histogram_quantile(0.99, sum(rate(asoc_http_request_duration_seconds_bucket{route=\"/api/v1/findings/ingest\"}[2m])) by (le))", "legendFormat": "p99", "refId": "A"}],
+      "title": "p99 латентность, мс",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "custom": {"drawStyle": "line", "fillOpacity": 10, "lineWidth": 2, "showPoints": "never"},
+          "unit": "ms"
+        },
+        "overrides": [
+          {"matcher": {"id": "byName", "options": "avg"}, "properties": [{"id": "color", "value": {"fixedColor": "blue", "mode": "fixed"}}]},
+          {"matcher": {"id": "byName", "options": "p50"}, "properties": [{"id": "color", "value": {"fixedColor": "green", "mode": "fixed"}}]},
+          {"matcher": {"id": "byName", "options": "p95"}, "properties": [{"id": "color", "value": {"fixedColor": "orange", "mode": "fixed"}}]},
+          {"matcher": {"id": "byName", "options": "p99"}, "properties": [{"id": "color", "value": {"fixedColor": "red", "mode": "fixed"}}]}
+        ]
+      },
+      "gridPos": {"h": 12, "w": 24, "x": 0, "y": 21},
+      "id": 15,
+      "options": {"legend": {"displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [
+        {"expr": "1000 * sum(rate(asoc_http_request_duration_seconds_sum{route=\"/api/v1/findings/ingest\"}[2m])) / sum(rate(asoc_http_request_duration_seconds_count{route=\"/api/v1/findings/ingest\"}[2m]))", "legendFormat": "avg", "refId": "A"},
+        {"expr": "1000 * histogram_quantile(0.50, sum(rate(asoc_http_request_duration_seconds_bucket{route=\"/api/v1/findings/ingest\"}[2m])) by (le))", "legendFormat": "p50", "refId": "B"},
+        {"expr": "1000 * histogram_quantile(0.95, sum(rate(asoc_http_request_duration_seconds_bucket{route=\"/api/v1/findings/ingest\"}[2m])) by (le))", "legendFormat": "p95", "refId": "C"},
+        {"expr": "1000 * histogram_quantile(0.99, sum(rate(asoc_http_request_duration_seconds_bucket{route=\"/api/v1/findings/ingest\"}[2m])) by (le))", "legendFormat": "p99", "refId": "D"}
+      ],
+      "title": "Латентность — avg · p50 · p95 · p99",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"color": {"mode": "palette-classic"}, "custom": {"drawStyle": "line", "fillOpacity": 20, "lineWidth": 2, "showPoints": "never"}, "unit": "cores"}},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 33},
       "id": 3,
-      "options": {
-        "legend": {"displayMode": "list", "placement": "bottom", "showLegend": true},
-        "tooltip": {"mode": "multi", "sort": "desc"}
-      },
-      "targets": [
-        {
-          "datasource": {"type": "prometheus", "uid": "prometheus"},
-          "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=\"asoc\", pod=~\"api-service-.*\", container!=\"\", container!=\"POD\"}[2m])) by (pod)",
-          "legendFormat": "{{pod}}",
-          "refId": "A"
-        }
-      ],
-      "title": "CPU (ядра) — поды api-service",
+      "options": {"legend": {"displayMode": "list", "placement": "bottom"}, "tooltip": {"mode": "multi"}},
+      "targets": [{"expr": "sum(rate(container_cpu_usage_seconds_total{namespace=\"asoc\", pod=~\"api-service-.*\", container!=\"\", container!=\"POD\"}[2m]))", "legendFormat": "api-service (total)", "refId": "A"}],
+      "title": "CPU — api-service (суммарно)",
       "type": "timeseries"
     },
     {
       "datasource": {"type": "prometheus", "uid": "prometheus"},
-      "fieldConfig": {
-        "defaults": {
-          "color": {"mode": "palette-classic"},
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "drawStyle": "line",
-            "fillOpacity": 25,
-            "lineWidth": 2,
-            "pointSize": 5,
-            "showPoints": "never",
-            "spanNulls": false
-          },
-          "mappings": [],
-          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}]},
-          "unit": "cores"
-        },
-        "overrides": []
-      },
-      "gridPos": {"h": 9, "w": 12, "x": 12, "y": 4},
+      "fieldConfig": {"defaults": {"color": {"mode": "palette-classic"}, "custom": {"drawStyle": "line", "fillOpacity": 20, "lineWidth": 2, "showPoints": "never"}, "unit": "cores"}},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 33},
       "id": 4,
-      "options": {
-        "legend": {"displayMode": "list", "placement": "bottom", "showLegend": true},
-        "tooltip": {"mode": "multi", "sort": "desc"}
-      },
-      "targets": [
-        {
-          "datasource": {"type": "prometheus", "uid": "prometheus"},
-          "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=\"asoc\", pod=~\"processing-service-.*\", container!=\"\", container!=\"POD\"}[2m])) by (pod)",
-          "legendFormat": "{{pod}}",
-          "refId": "A"
-        }
-      ],
-      "title": "CPU (ядра) — поды processing-service",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {"type": "prometheus", "uid": "prometheus"},
-      "fieldConfig": {
-        "defaults": {
-          "color": {"mode": "palette-classic"},
-          "custom": {
-            "drawStyle": "line",
-            "fillOpacity": 15,
-            "lineWidth": 1,
-            "showPoints": "never"
-          },
-          "unit": "percentunit"
-        },
-        "overrides": []
-      },
-      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 13},
-      "id": 5,
-      "options": {
-        "legend": {"displayMode": "list", "placement": "bottom", "showLegend": true},
-        "tooltip": {"mode": "single", "sort": "none"}
-      },
-      "targets": [
-        {
-          "datasource": {"type": "prometheus", "uid": "prometheus"},
-          "expr": "sum(rate(nginx_ingress_controller_requests[2m]))",
-          "legendFormat": "Ingress RPS (при скрейпе ingress-nginx)",
-          "refId": "A"
-        }
-      ],
-      "title": "Опционально: суммарный RPS ingress-nginx (для скринов «нагрузка»)",
+      "options": {"legend": {"displayMode": "list", "placement": "bottom"}, "tooltip": {"mode": "multi"}},
+      "targets": [{"expr": "sum(rate(container_cpu_usage_seconds_total{namespace=\"asoc\", pod=~\"processing-service-.*\", container!=\"\", container!=\"POD\"}[2m]))", "legendFormat": "processing-service", "refId": "A"}],
+      "title": "CPU — processing-service (Kafka consumer)",
       "type": "timeseries"
     }
   ],
   "refresh": "5s",
   "schemaVersion": 39,
-  "tags": ["asoc", "loadtest", "hpa"],
+  "tags": ["asoc", "loadtest"],
   "templating": {"list": []},
   "time": {"from": "now-30m", "to": "now"},
-  "timepicker": {},
   "timezone": "",
-  "title": "ASOC — нагрузка и масштабирование",
+  "title": "ASOC — POST /api/v1/findings/ingest — нагрузочное тестирование",
   "uid": "asoc-loadtest-hpa",
-  "version": 1,
+  "version": 9,
   "weekStart": ""
 }

@@ -1,4 +1,4 @@
-# Генерация ConfigMap с дашбордом ASOC для Grafana sidecar (лейбл grafana_dashboard).
+# ConfigMap'ы с дашбордами ASOC и Defect Dojo для Grafana sidecar (лейбл grafana_dashboard).
 # kubectl apply -k deploy/k8s/monitoring
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
@@ -17,3 +17,6 @@ configMapGenerator:
   - name: grafana-dashboard-asoc-loadtest
     files:
       - grafana-dashboard-asoc-loadtest.json
+  - name: grafana-dashboard-defectdojo-loadtest
+    files:
+      - grafana-dashboard-defectdojo-loadtest.json

@@ -55,13 +55,8 @@ func (s *TicketService) createTicketInJira(ctx context.Context, req models.Ticke
 			"project": map[string]any{
 				"key": s.projectKey,
 			},
-			"summary": fmt.Sprintf("Vulnerability group %s", req.GroupKey),
-			"description": fmt.Sprintf(
-				"Severity: %s\nAssets count: %d\nCorrelation ref: %s",
-				req.Severity,
-				req.AssetsCount,
-				req.CorrelationRef,
-			),
+			"summary":     ticketSummary(req),
+			"description": formatTicketDescription(req),
 			"issuetype": map[string]any{
 				"name": "Task",
 			},

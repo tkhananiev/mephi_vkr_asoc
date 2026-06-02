@@ -64,12 +64,15 @@ func (h *Handler) Register(mux *http.ServeMux) {
 			writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
 		}
 	})
-	mux.HandleFunc("/api/v1/groups", h.handleGroupsProxy)
+	mux.HandleFunc("/api/v1/groups", h.handleGroupsRoute)
+	mux.HandleFunc("/api/v1/groups/", h.handleGroupsRoute)
 	mux.HandleFunc("/api/v1/report/vulnerabilities", h.handleReportVulnerabilitiesProxy)
 	mux.HandleFunc("/api/v1/findings/ingest", h.handlePublicFindingsIngest)
 	mux.HandleFunc("/api/v1/scans", h.handleUnifiedScan)
 	mux.HandleFunc("/api/v1/scans/semgrep", h.handleSemgrepScan)
 	mux.HandleFunc("/api/v1/scans/gitleaks", h.handleGitleaksScan)
+	mux.HandleFunc("/api/v1/scans/sca", h.handleScaScan)
+	mux.HandleFunc("/api/v1/scans/dast", h.handleDastScan)
 	mux.HandleFunc("/api/v1/admin/ops/docker/logs", h.handleDockerLogs)
 	mux.HandleFunc("/api/v1/admin/ops/docker/restart", h.handleDockerRestart)
 }
@@ -126,6 +129,19 @@ func (h *Handler) handlePublicFindingsIngest(w http.ResponseWriter, r *http.Requ
 	}
 	if strings.TrimSpace(payload.Channel) == "" {
 		payload.Channel = "ci"
+	}
+	if h.orchestrator.KafkaIngestEnabled() {
+		corr, err := h.orchestrator.EnqueueFindings(r.Context(), payload)
+		if err != nil {
+			writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusAccepted, models.IngestAcceptedResponse{
+			Status:         "accepted",
+			CorrelationID:  corr,
+			FindingsQueued: len(payload.Findings),
+		})
+		return
 	}
 	res, err := h.orchestrator.IngestFindings(r.Context(), payload)
 	if err != nil {
@@ -231,6 +247,14 @@ func (h *Handler) prepareScannerTarget(scannerID string, request *models.ScanReq
 		return nil
 	case "gitleaks":
 		return h.prepareFilesystemScanDefaults(request)
+	case "trivy-sca", "sca", "trivy":
+		return h.prepareFilesystemScanDefaults(request)
+	case "zap-dast", "dast", "zap":
+		if strings.TrimSpace(request.TargetURL) == "" {
+			return fmt.Errorf("target_url required for DAST scan")
+		}
+		request.TargetURL = strings.TrimSpace(request.TargetURL)
+		return nil
 	default:
 		if it, ok := h.integrationStore.LookupAdditional(scannerID); ok && strings.TrimSpace(it.ScannerInvokeURL) != "" {
 			return h.prepareFilesystemScanDefaults(request)
@@ -323,6 +347,80 @@ func (h *Handler) handleGitleaksScan(w http.ResponseWriter, r *http.Request) {
 	}
 
 	passport, err := h.orchestrator.RunGitleaksScenario(r.Context(), request, owner)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+		return
+	}
+
+	writeJSON(w, http.StatusAccepted, passport)
+}
+
+func (h *Handler) handleScaScan(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		return
+	}
+
+	var request models.ScanRequest
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json body"})
+		return
+	}
+	if request.ScannerName == "" {
+		request.ScannerName = "trivy-sca"
+	}
+	request.ConsoleProductID = normalizeConsoleProductID(request.ConsoleProductID)
+	if !h.assertConsoleProductAccess(w, r, request.ConsoleProductID) {
+		return
+	}
+	if err := h.prepareScannerTarget("trivy-sca", &request); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+
+	var owner int64
+	if uid, ok := ConsoleUserFromRequest(r); ok {
+		owner = uid
+	}
+
+	passport, err := h.orchestrator.RunScaScenario(r.Context(), request, owner)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+		return
+	}
+
+	writeJSON(w, http.StatusAccepted, passport)
+}
+
+func (h *Handler) handleDastScan(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		return
+	}
+
+	var request models.ScanRequest
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json body"})
+		return
+	}
+	if request.ScannerName == "" {
+		request.ScannerName = "zap-dast"
+	}
+	request.ConsoleProductID = normalizeConsoleProductID(request.ConsoleProductID)
+	if !h.assertConsoleProductAccess(w, r, request.ConsoleProductID) {
+		return
+	}
+	if err := h.prepareScannerTarget("zap-dast", &request); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+
+	var owner int64
+	if uid, ok := ConsoleUserFromRequest(r); ok {
+		owner = uid
+	}
+
+	passport, err := h.orchestrator.RunDastScenario(r.Context(), request, owner)
 	if err != nil {
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
 		return

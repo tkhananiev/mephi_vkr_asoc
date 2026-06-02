@@ -23,6 +23,10 @@ var k8sDeploymentByService = map[string]string{
 	"jir":  "jira-integration-service",
 	"sem":  "semgrep-service",
 	"gls":  "gitleaks-service",
+	"sca":  "trivy-sca-service",
+	"trivy": "trivy-sca-service",
+	"zap":  "zap-dast-service",
+	"dast": "zap-dast-service",
 }
 
 // K8sRunner читает логи подов и делает rollout restart деплоя (как kubectl).

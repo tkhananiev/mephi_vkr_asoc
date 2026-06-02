@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Выкладка на Kubernetes-стенд (namespace asoc): kubectl apply (Kustomize) + образы + restart.
+# Выкладка на стенд в namespace asoc: kubectl apply (Kustomize) + образы + restart.
 # Все Deployments намеренно с strategy: Recreate (без второго ReplicaSet-пода при обновлении — важно для RWO/PVC и чистых перезапусков).
 # Использование (из любого каталога):
 #   ./deploy/scripts/rollout-stand.sh           # все приложения из workloads + web (в т.ч. reference-data, jira)
@@ -123,6 +123,36 @@ docker_build_push_gitleaks() {
   docker push "${REGISTRY}/gitleaks:${IMAGE_TAG}"
 }
 
+docker_build_push_trivy_sca() {
+  echo "==> docker build ${REGISTRY}/trivy-sca:${IMAGE_TAG} (${PLATFORM})"
+  docker build --platform "${PLATFORM}" \
+    -f "${REPO_ROOT}/services/trivy-sca-service/Dockerfile" \
+    -t "${REGISTRY}/trivy-sca:${IMAGE_TAG}" \
+    "${REPO_ROOT}"
+  echo "==> docker push ${REGISTRY}/trivy-sca:${IMAGE_TAG}"
+  docker push "${REGISTRY}/trivy-sca:${IMAGE_TAG}"
+}
+
+docker_build_push_zap_dast() {
+  echo "==> docker build ${REGISTRY}/zap-dast:${IMAGE_TAG} (${PLATFORM})"
+  docker build --platform "${PLATFORM}" \
+    -f "${REPO_ROOT}/services/zap-dast-service/Dockerfile" \
+    -t "${REGISTRY}/zap-dast:${IMAGE_TAG}" \
+    "${REPO_ROOT}"
+  echo "==> docker push ${REGISTRY}/zap-dast:${IMAGE_TAG}"
+  docker push "${REGISTRY}/zap-dast:${IMAGE_TAG}"
+}
+
+docker_build_push_findings_adapter() {
+  echo "==> docker build ${REGISTRY}/findings-adapter:${IMAGE_TAG} (${PLATFORM})"
+  docker build --platform "${PLATFORM}" \
+    -f "${REPO_ROOT}/services/findings-adapter-service/Dockerfile" \
+    -t "${REGISTRY}/findings-adapter:${IMAGE_TAG}" \
+    "${REPO_ROOT}"
+  echo "==> docker push ${REGISTRY}/findings-adapter:${IMAGE_TAG}"
+  docker push "${REGISTRY}/findings-adapter:${IMAGE_TAG}"
+}
+
 docker_build_push_generic_scan_runner() {
   echo "==> docker build ${REGISTRY}/generic-scan-runner:${IMAGE_TAG} (${PLATFORM})"
   docker build --platform "${PLATFORM}" \
@@ -167,6 +197,9 @@ rollout_all() {
     deployment/asoc-web \
     deployment/semgrep-service \
     deployment/gitleaks-service \
+    deployment/trivy-sca-service \
+    deployment/zap-dast-service \
+    deployment/findings-adapter-service \
     deployment/generic-scan-runner \
     deployment/processing-service
 
@@ -177,6 +210,9 @@ rollout_all() {
   kubectl -n "${NS}" rollout status deployment/asoc-web --timeout=240s
   kubectl -n "${NS}" rollout status deployment/semgrep-service --timeout=240s
   kubectl -n "${NS}" rollout status deployment/gitleaks-service --timeout=240s
+  kubectl -n "${NS}" rollout status deployment/trivy-sca-service --timeout=240s
+  kubectl -n "${NS}" rollout status deployment/zap-dast-service --timeout=240s
+  kubectl -n "${NS}" rollout status deployment/findings-adapter-service --timeout=240s
   kubectl -n "${NS}" rollout status deployment/generic-scan-runner --timeout=240s
   kubectl -n "${NS}" rollout status deployment/processing-service --timeout=240s
   echo "==> готово. Проверка: curl -sS https://atomic-asoc.ru/health"
@@ -214,6 +250,21 @@ case "${TARGET}" in
     kubectl -n "${NS}" rollout restart deployment/gitleaks-service
     kubectl -n "${NS}" rollout status deployment/gitleaks-service --timeout=240s
     ;;
+  trivy-sca|sca|trivy)
+    docker_build_push_trivy_sca
+    kubectl -n "${NS}" rollout restart deployment/trivy-sca-service
+    kubectl -n "${NS}" rollout status deployment/trivy-sca-service --timeout=240s
+    ;;
+  zap-dast|dast|zap)
+    docker_build_push_zap_dast
+    kubectl -n "${NS}" rollout restart deployment/zap-dast-service
+    kubectl -n "${NS}" rollout status deployment/zap-dast-service --timeout=240s
+    ;;
+  findings-adapter|adapter)
+    docker_build_push_findings_adapter
+    kubectl -n "${NS}" rollout restart deployment/findings-adapter-service
+    kubectl -n "${NS}" rollout status deployment/findings-adapter-service --timeout=240s
+    ;;
   generic-scan-runner|runner)
     docker_build_push_generic_scan_runner
     kubectl -n "${NS}" rollout restart deployment/generic-scan-runner
@@ -248,12 +299,15 @@ case "${TARGET}" in
     docker_build_push_web
     docker_build_push_semgrep
     docker_build_push_gitleaks
+    docker_build_push_trivy_sca
+    docker_build_push_zap_dast
+    docker_build_push_findings_adapter
     docker_build_push_generic_scan_runner
     docker_build_push_processing
     rollout_all
     ;;
   *)
-    echo "usage: $0 [api|auth|web|semgrep|gitleaks|generic-scan-runner|processing|reference-data|jira-mock|jira-integration|all]" >&2
+    echo "usage: $0 [api|auth|web|semgrep|gitleaks|trivy-sca|zap-dast|findings-adapter|generic-scan-runner|processing|reference-data|jira-mock|jira-integration|all]" >&2
     exit 1
     ;;
 esac
