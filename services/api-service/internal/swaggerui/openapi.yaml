@@ -6,7 +6,7 @@ info:
     `POST /api/v1/scans/semgrep`, `…/gitleaks`, `…/sca` (Trivy) и `…/dast` (OWASP ZAP) оставлены для совместимости (тело как при соответствующем сканере — без поля `scanner_id`).
     **`POST /api/v1/findings/ingest`** — приём **уже нормализованных** находок в формате ниже (CI, сторонний сканер); поле `owner_user_id` в теле **не используется**, владелец берётся только из JWT пользователя консоли при наличии. Поле **`console_product_id`** (опционально) привязывает прогон к записи **`GET /api/v1/console/products`** того же пользователя; без JWT отбрасывается. Отчёт и группы по одному проекту — **`GET /api/v1/report/vulnerabilities?console_product_id=…`** и **`GET /api/v1/groups?console_product_id=…`** (нужен JWT пользователя, не только API-ключ). С внешнего контура авторизуйте запрос тем же **`X-API-Key` / Bearer API-ключа** или JWT (см. `APP_AUTH_API_KEY`).
     `GET /api/v1/integrations` — публичный каталог сканеров (без секретов): метаданные, флаг доступности для консоли.
-    Способ передачи находок и настройки среды — в `docs/ENVIRONMENT.md` и `docs/ARCHITECTURE.md`.
+    Ingest находок: при `APP_KAFKA_BROKERS` — Kafka (`asoc.findings.ingest`, `asoc.findings.ingest.result`); иначе HTTP на `processing-service` (`POST /findings/ingest`). Переменные и K8s-стенд — `deploy/k8s/README.md`, локальный compose — `deploy/compose.yaml`.
   version: "1.0"
 servers:
   - url: https://atomic-asoc.ru

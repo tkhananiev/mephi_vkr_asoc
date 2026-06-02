@@ -2,7 +2,7 @@
 
 Backend **Atomic ASOC**: микросервисы на Go, PostgreSQL, Kafka для ingest находок, исполнители SAST (Semgrep, Gitleaks), SCA (Trivy), DAST (OWASP ZAP), интеграция с Jira. Локально — `deploy/compose.yaml`. Веб-клиент — репозиторий **`mephi_vkr_asoc_front`**.
 
-Документация: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), [`docs/SERVICES_AND_DATA.md`](docs/SERVICES_AND_DATA.md), [`docs/DATABASE.md`](docs/DATABASE.md), [`docs/ENVIRONMENT.md`](docs/ENVIRONMENT.md). Диаграммы: [`docs/diagrams/`](docs/diagrams/).
+Развёртывание и стенд: [`deploy/k8s/README.md`](deploy/k8s/README.md). HTTP API: OpenAPI в [`services/api-service/internal/swaggerui/openapi.yaml`](services/api-service/internal/swaggerui/openapi.yaml), UI — `/swagger` на `api-service`.
 
 ## Состав
 
@@ -25,7 +25,7 @@ Backend **Atomic ASOC**: микросервисы на Go, PostgreSQL, Kafka д�
       → api-service (groups, report) → jira-integration-service
 ```
 
-Подробности Kafka и HTTP fallback — в `docs/ARCHITECTURE.md`.
+Ingest находок: при заданном `APP_KAFKA_BROKERS` — топик `asoc.findings.ingest`; иначе `api-service` может слать их в `processing-service` по HTTP (`POST /findings/ingest`). На K8s-стенде ingest через Kafka обязателен (см. `deploy/k8s/README.md`).
 
 ## Быстрый старт
 
