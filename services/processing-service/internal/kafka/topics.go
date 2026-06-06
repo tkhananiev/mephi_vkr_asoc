@@ -10,7 +10,6 @@ import (
 	kafkago "github.com/segmentio/kafka-go"
 )
 
-// EnsureTopics создаёт топики и доводит число партиций до заданного (идемпотентно).
 func EnsureTopics(ctx context.Context, brokers []string, ingestTopic string, ingestPartitions int, resultTopic string, resultPartitions int) error {
 	if len(brokers) == 0 {
 		return errors.New("no kafka brokers")

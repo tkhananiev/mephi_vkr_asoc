@@ -44,7 +44,6 @@ type ReferenceAlias struct {
 	AliasValue string
 }
 
-// ReferenceSyncCursor — курсор инкрементального синка (сейчас используется для NVD lastMod).
 type ReferenceSyncCursor struct {
 	SourceCode           string
 	NVDLastModEnd        *time.Time
@@ -58,7 +57,7 @@ type SyncResult struct {
 	ItemsProcessed  int    `json:"items_processed"`
 	ItemsInserted   int    `json:"items_inserted"`
 	ItemsUpdated    int    `json:"items_updated"`
-	// NVD SyncMode: incremental — только изменения по lastModified с курсора; full — загрузка всего каталога NVD со страниц.
+
 	SyncMode string `json:"sync_mode,omitempty"`
 }
 
@@ -77,7 +76,6 @@ type SourceRecord struct {
 	ContentType string
 }
 
-// CatalogStatusResponse — сводка по актуальности справочника для UI (скан можно запускать всегда; корреляция зависит от каталога).
 type CatalogStatusResponse struct {
 	RecordCounts       map[string]int64     `json:"record_counts"`
 	RunningSyncs       []SyncRun            `json:"running_syncs"`

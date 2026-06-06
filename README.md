@@ -1,38 +1,43 @@
-# mephi_vkr_asoc
+# Atomic ASOC (backend)
 
-Backend **Atomic ASOC**: микросервисы на Go, PostgreSQL, Kafka для ingest находок, исполнители SAST (Semgrep, Gitleaks), SCA (Trivy), DAST (OWASP ZAP), интеграция с Jira. Локально — `deploy/compose.yaml`. Веб-клиент — репозиторий **`mephi_vkr_asoc_front`**.
+Микросервисы на Go, PostgreSQL, Kafka. SAST (Semgrep, Gitleaks), SCA (Trivy), DAST (ZAP), Jira. Веб-клиент — [`mephi_vkr_asoc_front`](https://github.com/tkhananiev/mephi_vkr_asoc_front).
 
-Развёртывание и стенд: [`deploy/k8s/README.md`](deploy/k8s/README.md). HTTP API: OpenAPI в [`services/api-service/internal/swaggerui/openapi.yaml`](services/api-service/internal/swaggerui/openapi.yaml), UI — `/swagger` на `api-service`.
+Развёртывание: [`deploy/k8s/README.md`](deploy/k8s/README.md). API: [`openapi.yaml`](services/api-service/internal/swaggerui/openapi.yaml), UI — `/swagger` на `api-service`.
 
-## Состав
+## Сервисы
 
-- `services/api-service` — внешний API и оркестрация сценариев
-- `services/reference-data-service` — синхронизация NVD и БДУ ФСТЭК
-- `services/processing-service` — нормализация, корреляция, группировка
-- `services/findings-adapter-service` — адаптация отчётов сканеров
-- `services/jira-integration-service`, `services/jira-mock` — тикеты Jira
-- `services/semgrep-service`, `gitleaks-service`, `trivy-sca-service`, `zap-dast-service` — сканирование
-- `migrations` — схемы БД
-- `deploy/k8s` — манифесты Kubernetes
-- `deploy/scripts/rollout-stand.sh` — сборка образов и выкладка на стенд
+| Каталог | Назначение |
+|---------|------------|
+| `services/api-service` | HTTP API, оркестрация сканов |
+| `services/reference-data-service` | NVD, БДУ ФСТЭК |
+| `services/processing-service` | нормализация, группы |
+| `services/findings-adapter-service` | адаптеры отчётов сканеров |
+| `services/jira-integration-service`, `jira-mock` | тикеты |
+| `services/*-service` (semgrep, gitleaks, trivy-sca, zap-dast) | исполнители |
+| `migrations/` | DDL PostgreSQL |
+| `deploy/k8s/` | Kubernetes |
+| `deploy/scripts/rollout-stand.sh` | сборка образов и выкладка |
 
-## Сквозной сценарий
+## Поток данных
 
 ```text
-Клиент → api-service (POST /api/v1/scans)
-      → executor (semgrep | gitleaks | trivy-sca | zap-dast)
-      → findings-adapter → Kafka ingest → processing-service
-      → api-service (groups, report) → jira-integration-service
+POST /api/v1/scans → executor → findings-adapter → Kafka → processing → groups / report → Jira
 ```
 
-Ingest находок: при заданном `APP_KAFKA_BROKERS` — топик `asoc.findings.ingest`; иначе `api-service` может слать их в `processing-service` по HTTP (`POST /findings/ingest`). На K8s-стенде ingest через Kafka обязателен (см. `deploy/k8s/README.md`).
+Ingest находок: Kafka (`asoc.findings.ingest`) или HTTP fallback в compose. На K8s — только Kafka (`APP_REQUIRE_KAFKA_FOR_FINDINGS_INGEST=true`).
 
-## Быстрый старт
+## Локально
 
 ```bash
 docker compose -f deploy/compose.yaml up -d --build
 ```
 
-Порты: api `8080`, reference-data `8081`, processing `8082`, jira `8083`, semgrep `8085`, kafka `9092`.
+Порты: api `8080`, reference-data `8081`, processing `8082`, jira `8083`, semgrep `8085`.
 
-Kubernetes: см. [`deploy/k8s/README.md`](deploy/k8s/README.md).
+## Стенд
+
+```bash
+./deploy/scripts/rollout-stand.sh
+```
+
+Подробности — `deploy/k8s/README.md`.

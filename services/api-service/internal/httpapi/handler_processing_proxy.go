@@ -35,7 +35,6 @@ func parseConsoleProductQueryParam(r *http.Request) (*int64, error) {
 	return &id, nil
 }
 
-// ensureConsoleProductReportAccess — при ?console_product_id= нужен JWT пользователя и владение продуктом.
 func (h *Handler) ensureConsoleProductReportAccess(w http.ResponseWriter, r *http.Request) bool {
 	cp, err := parseConsoleProductQueryParam(r)
 	if err != nil {

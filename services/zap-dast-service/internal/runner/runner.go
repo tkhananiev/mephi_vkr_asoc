@@ -4,7 +4,6 @@ import (
 	"context"
 )
 
-// Runner запускает OWASP ZAP baseline или HTTP-probe stub.
 type Runner struct {
 	zapHome    string
 	timeoutMin int
@@ -22,7 +21,6 @@ func New(zapHome string, timeoutMin int, useStub bool) *Runner {
 	}
 }
 
-// Run возвращает JSON `{ "findings": [...] }` в формате processing ingest.
 func (r *Runner) Run(ctx context.Context, targetURL string) ([]byte, error) {
 	if r.useStub {
 		return runHTTPProbeStub(ctx, targetURL)

@@ -17,7 +17,6 @@ func New(binary string) *Runner {
 	return &Runner{binary: strings.TrimSpace(binary)}
 }
 
-// Run выполняет `trivy fs` и возвращает JSON-отчёт Trivy.
 func (r *Runner) Run(ctx context.Context, targetPath string) ([]byte, error) {
 	tp := filepath.Clean(strings.TrimSpace(targetPath))
 	if tp == "" || tp == "." {

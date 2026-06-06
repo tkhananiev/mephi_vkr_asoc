@@ -20,7 +20,6 @@ import (
 	"mephi_vkr_asoc/services/reference-data-service/internal/models"
 )
 
-// BulkImporter — полный офлайн-импорт из vulxml.zip (или распакованного vulxml.xml) и vullist.xlsx (БДУ ФСТЭК).
 // Потоковый разбор XML не загружает весь файл в память; xlsx читается построчно через excelize.
 type BulkImporter struct {
 	HTTP          *http.Client
@@ -45,7 +44,6 @@ func NewBulkImporter(httpClient *http.Client, zipURL, xlsxURL string, batchSize 
 	}
 }
 
-// normalizeBDULocalRef — plain path или file:///path (локальная копия vulxml / vullist).
 func normalizeBDULocalRef(raw string) (string, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
@@ -71,7 +69,6 @@ func normalizeBDULocalRef(raw string) (string, error) {
 	return filepath.Clean(raw), nil
 }
 
-// Import читает vulxml (zip или plain .xml) и XLSX с диска (если заданы локальные пути) или скачивает по HTTP, затем импортирует батчами.
 func (b *BulkImporter) Import(ctx context.Context, onBatch func([]models.SourceRecord) error) error {
 	vulPath, vulCleanup, plainXML, err := b.resolveVulXMLSource(ctx)
 	if err != nil {
@@ -113,7 +110,6 @@ func (b *BulkImporter) Import(ctx context.Context, onBatch func([]models.SourceR
 	return nil
 }
 
-// resolveVulXMLSource возвращает путь к файлу: либо распакованный vulxml.xml (plainXML=true), либо архив zip (plainXML=false).
 func (b *BulkImporter) resolveVulXMLSource(ctx context.Context) (path string, cleanup func(), plainXML bool, err error) {
 	local, err := normalizeBDULocalRef(b.ZipLocalPath)
 	if err != nil {
@@ -228,7 +224,7 @@ func (b *BulkImporter) streamVulDecodeLoop(ctx context.Context, dec *xml.Decoder
 			continue
 		}
 		if se.Name.Local != "vul" {
-			// Не вызывать Skip() для контейнера <vulnerabilities> — иначе пропадут все вложенные <vul>.
+		
 			if se.Name.Local == "vulnerabilities" {
 				continue
 			}

@@ -8,7 +8,6 @@ import (
 	"mephi_vkr_asoc/services/reference-data-service/internal/service"
 )
 
-// Start запускает цикл: после initialDelay — полная синхронизация БДУ и NVD, затем каждые interval.
 func Start(ctx context.Context, svc *service.SyncService, interval, initialDelay time.Duration) {
 	if interval <= 0 || svc == nil {
 		return
@@ -42,7 +41,7 @@ func runOnce(svc *service.SyncService) {
 		}
 	}()
 
-	// Полная выгрузка NVD может занимать много часов (лимиты API); не обрывать через 6h.
+
 	reqCtx, cancel := context.WithTimeout(context.Background(), 168*time.Hour)
 	defer cancel()
 

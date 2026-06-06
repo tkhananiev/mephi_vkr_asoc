@@ -12,7 +12,6 @@ import (
 	"mephi_vkr_asoc/services/reference-data-service/internal/service"
 )
 
-// longRunningSyncContext — долгий синк без отмены при закрытии HTTP-клиента; defer cancel() в обработчике.
 func longRunningSyncContext() (context.Context, context.CancelFunc) {
 	return context.WithTimeout(context.Background(), 168*time.Hour)
 }

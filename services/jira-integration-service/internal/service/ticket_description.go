@@ -78,7 +78,6 @@ func fieldOrDash(s string) string {
 
 const jiraSummaryMaxLen = 255
 
-// ticketSummary — заголовок задачи Jira: файл/класс + CVE/BDU, чтобы в списке задач было видно место находки.
 func ticketSummary(req models.TicketRequest) string {
 	if len(req.Vulnerabilities) > 0 {
 		v := req.Vulnerabilities[0]

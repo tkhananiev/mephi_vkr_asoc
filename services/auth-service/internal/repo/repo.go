@@ -27,7 +27,6 @@ type ConsoleUser struct {
 	UpdatedAt    time.Time
 }
 
-// ConsoleUserInsert — параметры создания записи пользователя консоли.
 type ConsoleUserInsert struct {
 	Email         string
 	Username      string
@@ -38,7 +37,6 @@ type ConsoleUserInsert struct {
 	PasswordHash  string
 }
 
-// FormatDisplayFromFIO — «Фамилия Имя Отчество» для JWT и UI.
 func FormatDisplayFromFIO(last, first, patronymic string) string {
 	var parts []string
 	last, first, patronymic = strings.TrimSpace(last), strings.TrimSpace(first), strings.TrimSpace(patronymic)
@@ -368,7 +366,6 @@ func (r *Repo) DeleteAdmin(ctx context.Context, id int64) error {
 	return nil
 }
 
-// PromoteConsoleUserToAdmin — переносит хеш пароля в authn.admins и удаляет строку пользователя консоли.
 func (r *Repo) PromoteConsoleUserToAdmin(ctx context.Context, consoleUserID int64, login string) (adminID int64, err error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
@@ -400,7 +397,6 @@ func (r *Repo) PromoteConsoleUserToAdmin(ctx context.Context, consoleUserID int6
 	return adminID, nil
 }
 
-// DemoteAdminToConsoleUser — создаёт пользователя консоли с тем же password_hash и удаляет администратора.
 func (r *Repo) DemoteAdminToConsoleUser(ctx context.Context, adminID int64, email, username, firstName, lastName, patronymic string) (consoleUserID int64, err error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {

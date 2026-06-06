@@ -22,7 +22,6 @@ type NVDSourceClient interface {
 	FetchByCVE(ctx context.Context, cveID string) ([]models.SourceRecord, error)
 }
 
-// NVDFullSync — постраничная загрузка NVD без хранения всего каталога в памяти.
 type NVDFullSync interface {
 	SyncAllPages(ctx context.Context, onPage func([]models.SourceRecord) error) error
 	SyncAllPagesModRange(ctx context.Context, modStart, modEnd time.Time, onPage func([]models.SourceRecord) error) error
@@ -66,7 +65,6 @@ func (s *SyncService) SyncBDU(ctx context.Context) (models.SyncResult, error) {
 	return s.syncSource(ctx, "bdu_fstec", s.bdu)
 }
 
-// SyncBDUBulk — полный импорт vulxml.zip + vullist.xlsx (ручной запуск; RSS остаётся для подгрузки новых).
 func (s *SyncService) SyncBDUBulk(ctx context.Context) (models.SyncResult, error) {
 	s.bduBulkGate.Lock()
 	defer s.bduBulkGate.Unlock()
@@ -125,7 +123,6 @@ func (s *SyncService) syncBDUBulkUnlocked(ctx context.Context) (models.SyncResul
 	return result, nil
 }
 
-// SyncBDUBulkAsync запускает полный импорт БДУ в фоне; при занятости возвращает ошибку (HTTP 409).
 func (s *SyncService) SyncBDUBulkAsync() error {
 	if !s.bduBulkGate.TryLock() {
 		return fmt.Errorf("полный импорт БДУ уже выполняется")
@@ -141,7 +138,6 @@ func (s *SyncService) SyncBDUBulkAsync() error {
 	return nil
 }
 
-// ResetNVDCursor сбрасывает курсор lastMod (следующий SyncNVD выполнит полную загрузку всех страниц).
 func (s *SyncService) ResetNVDCursor(ctx context.Context) error {
 	return s.repo.DeleteReferenceSyncCursor(ctx, nvdCursorSource)
 }
@@ -161,7 +157,7 @@ func (s *SyncService) syncNVDPaged(ctx context.Context, paged NVDFullSync, runID
 		result.ItemsInserted += ins
 		result.ItemsUpdated += upd
 		pageSeq++
-		// Запись прогресса в audit.reference_sync_runs для опроса из консоли (без спама UPDATE на каждую страницу).
+	
 		if pageSeq <= 8 || pageSeq%12 == 0 || time.Since(lastProgWrite) >= 4*time.Second {
 			lastProgWrite = time.Now()
 			if err := s.repo.UpdateSyncRunProgress(ctx, runID, result); err != nil {
@@ -242,7 +238,6 @@ func (s *SyncService) SyncNVD(ctx context.Context) (models.SyncResult, error) {
 	return s.syncNVDUnlocked(ctx)
 }
 
-// SyncNVDAsync — то же, что SyncNVD, но в отдельной goroutine (HTTP сразу отвечает 202).
 func (s *SyncService) SyncNVDAsync() error {
 	if !s.nvdGate.TryLock() {
 		return fmt.Errorf("синхронизация NVD уже выполняется")
@@ -386,7 +381,6 @@ func (s *SyncService) syncSource(ctx context.Context, sourceCode string, client 
 	return s.persistRecords(ctx, runID, sourceCode, records)
 }
 
-// applyRecords записывает батч записей; возвращает счётчики для накопления (NVD по страницам).
 // Если skipExistingReference=true (полный импорт БДУ bulk): при уже существующей записи каталога только пропуск — без UPDATE полей и без правки алиасов у старой строки.
 func (s *SyncService) applyRecords(ctx context.Context, sourceCode string, records []models.SourceRecord, skipExistingReference bool) (discovered, processed, inserted, updated int) {
 	discovered = len(records)

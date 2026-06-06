@@ -8,13 +8,12 @@ type ScanRequest struct {
 	ScannerName      string `json:"scanner_name"`
 	SemgrepConfig    string `json:"semgrep_config,omitempty"`
 	GitRepositoryURL string `json:"git_repository_url,omitempty"`
-	// GitRepositoryRef — ветка или тег после clone (необязательно: ветка по умолчанию у удалённого репозитория).
+
 	GitRepositoryRef string `json:"git_repository_ref,omitempty"`
-	// ConsoleProductID — привязка прогона к core.console_products (только с JWT владельца).
+
 	ConsoleProductID *int64 `json:"console_product_id,omitempty"`
 }
 
-// UnifiedScanRequest — тело POST /api/v1/scans (один вход для всех сканеров).
 // Поля цели те же, что у ScanRequest; scanner_id выбирает исполнитель.
 type UnifiedScanRequest struct {
 	ScannerID        string `json:"scanner_id"`
@@ -25,7 +24,7 @@ type UnifiedScanRequest struct {
 	GitRepositoryURL string `json:"git_repository_url,omitempty"`
 	GitRepositoryRef string `json:"git_repository_ref,omitempty"`
 	ConsoleProductID *int64 `json:"console_product_id,omitempty"`
-	// Options — необязательные параметры сканера (Semgrep их пока не читает; зарезервировано под расширения).
+
 	Options map[string]any `json:"options,omitempty"`
 }
 
@@ -61,7 +60,6 @@ type SemgrepFinding struct {
 	} `json:"extra"`
 }
 
-// GitleaksFinding — элемент JSON-отчёта `gitleaks detect --report-format json`.
 type GitleaksFinding struct {
 	RuleID      string   `json:"RuleID"`
 	Description string   `json:"Description"`
@@ -71,15 +69,14 @@ type GitleaksFinding struct {
 	Tags        []string `json:"Tags"`
 }
 
-// ProcessingIngestRequest — контракт пакета находок: Semgrep-сценарий, Kafka и POST /api/v1/findings/ingest на api-service.
 type ProcessingIngestRequest struct {
 	ScannerName string                  `json:"scanner_name"`
 	Findings    []ProcessingFindingItem `json:"findings"`
-	// OwnerUserID выставляет api-service для JWT пользователя консоли (authn.console_users.id).
+
 	OwnerUserID *int64 `json:"owner_user_id,omitempty"`
-	// ConsoleProductID — core.console_products.id; только с JWT пользователя, владельца продукта проверяем здесь.
+
 	ConsoleProductID *int64 `json:"console_product_id,omitempty"`
-	// Channel: «manual» (сценарии POST /api/v1/scans) или «ci» (ingest из пайплайна). Пустое на публичном ingest — по умолчанию ci.
+
 	Channel string `json:"channel,omitempty"`
 }
 
@@ -103,7 +100,6 @@ type ProcessingResponse struct {
 	GroupsUpdated          int   `json:"groups_updated"`
 }
 
-// IngestAcceptedResponse — немедленный ответ публичного ingest при Kafka (обработка в фоне).
 type IngestAcceptedResponse struct {
 	Status         string `json:"status"`
 	CorrelationID  string `json:"correlation_id"`

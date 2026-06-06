@@ -11,7 +11,6 @@ import (
 	"mephi_vkr_asoc/services/api-service/internal/auth"
 )
 
-// Только JWT Atomic-admin (role=admin). Не API-ключ — ops слишком опасны.
 func (h *Handler) requireAdminRole(r *http.Request) (*auth.Claims, bool) {
 	if len(h.jwtSecret) < 32 {
 		return nil, false

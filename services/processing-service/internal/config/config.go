@@ -21,8 +21,8 @@ type Config struct {
 func Load() Config {
 	brokers := splitCSV(getEnv("APP_KAFKA_BROKERS", ""))
 	kafkaOn := len(brokers) > 0
-	// С Kafka: приём находок из топика (основной путь). HTTP POST /findings/ingest по умолчанию выкл.
-	// Без брокеров (локальный запуск только processing): HTTP ingest остаётся включённым по умолчанию.
+
+
 	httpFindings := getBoolEnv("APP_HTTP_FINDINGS_INGEST", !kafkaOn)
 	return Config{
 		HTTPPort:                  getEnv("APP_HTTP_PORT", "8082"),

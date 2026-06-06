@@ -8,7 +8,6 @@ import (
 	"mephi_vkr_asoc/services/findings-adapter-service/internal/models"
 )
 
-// Flexible определяет формат по первому ключу JSON (semgrep / trivy / findings / gitleaks array).
 func Flexible(raw []byte, targetURL string) ([]models.FindingItem, error) {
 	raw = bytes.TrimSpace(raw)
 	if len(raw) == 0 {

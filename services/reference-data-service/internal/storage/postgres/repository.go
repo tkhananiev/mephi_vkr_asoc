@@ -32,7 +32,6 @@ func (r *Repository) StartSyncRun(ctx context.Context, sourceCode string) (int64
 	return id, err
 }
 
-// UpdateSyncRunProgress — промежуточное обновление во время долгих синков (bulk БДУ), чтобы в БД был виден прогресс.
 func (r *Repository) UpdateSyncRunProgress(ctx context.Context, runID int64, result models.SyncResult) error {
 	_, err := r.pool.Exec(ctx, `
 		UPDATE audit.reference_sync_runs
@@ -139,7 +138,6 @@ func (r *Repository) UpsertReferenceRecord(ctx context.Context, record models.Re
 	return inserted, nil
 }
 
-// InsertReferenceRecordIfAbsent вставляет запись каталога и алиасы только если ещё нет строки с тем же (source_code, external_id).
 func (r *Repository) InsertReferenceRecordIfAbsent(ctx context.Context, record models.ReferenceRecord) (inserted bool, err error) {
 	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {

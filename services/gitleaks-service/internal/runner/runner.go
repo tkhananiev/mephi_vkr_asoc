@@ -28,7 +28,6 @@ func randomSuffix() string {
 	return hex.EncodeToString(b)
 }
 
-// Run выполняет gitleaks detect; JSON пишется в файл, код выхода принудительно 0,
 // чтобы отчёт можно было разобрать при наличии находок.
 func (r *Runner) Run(ctx context.Context, targetPath string) ([]byte, error) {
 	tp := filepath.Clean(strings.TrimSpace(targetPath))

@@ -91,7 +91,6 @@ func normalizeConsoleIdentifier(identifierField, legacyEmailField string) string
 	return who
 }
 
-// validateConsoleUserProfile — общие правила для пользователя консоли (ФИО, логин, e-mail): саморегистрация, создание админом, понижение админа.
 func validateConsoleUserProfile(lastName, firstName, patronymic, username, email string) string {
 	if msg := validateChunk("last_name", lastName, 120, true); msg != "" {
 		return msg

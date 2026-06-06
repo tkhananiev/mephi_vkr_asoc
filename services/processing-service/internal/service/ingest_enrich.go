@@ -11,7 +11,6 @@ import (
 var ingestCVEPat = regexp.MustCompile(`(?i)CVE-\d{4}-\d+`)
 var ingestCWEPat = regexp.MustCompile(`(?i)CWE-\d+`)
 
-// enrichFindingCatalogFields — CWE/CVE могут оказаться только в metadata (CI, старый формат).
 func enrichFindingCatalogFields(item models.FindingDTO) models.FindingDTO {
 	item.CVE = strings.TrimSpace(item.CVE)
 	item.CWE = strings.TrimSpace(item.CWE)

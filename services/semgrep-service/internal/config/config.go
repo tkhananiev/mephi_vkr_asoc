@@ -10,7 +10,7 @@ type Config struct {
 	SemgrepBinary         string
 	SemgrepConfig         string
 	DefaultScanTargetPath string // если в POST не передан target_path и нет git
-	// Корневой каталог для временных git clone перед сканированием (/tmp может быть маленьким — лучше emptyDir том).
+
 	GitWorkspaceRoot string
 }
 

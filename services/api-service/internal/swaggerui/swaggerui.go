@@ -22,7 +22,6 @@ const indexHTML = `<!DOCTYPE html>
 </body>
 </html>`
 
-// Register добавляет GET /openapi.yaml и GET /swagger/ (UI).
 func Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /openapi.yaml", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/yaml; charset=utf-8")

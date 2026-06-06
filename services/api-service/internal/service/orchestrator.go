@@ -19,10 +19,8 @@ import (
 
 const processingConsoleUserHeader = "X-ASOC-Console-User-ID"
 
-// ErrUnsupportedScannerID — scanner_id не зарегистрирован в RunScan (клиенту — 400).
 var ErrUnsupportedScannerID = errors.New("unsupported scanner_id")
 
-// DynamicScannerLookup — доп. сканеры из админ-каталога с полем scanner_invoke_url и опционально runner_command.
 type DynamicScannerLookup func(scannerID string) (invokeURL string, scannerName string, runnerCommand string, ok bool)
 
 type Orchestrator struct {
@@ -53,7 +51,6 @@ func New(processingURL, jiraURL, semgrepURL, gitleaksURL, scaURL, dastURL, adapt
 	}
 }
 
-// RunScan выполняет сценарий по scanner_id (semgrep / gitleaks → ingest / группы / Jira).
 func (o *Orchestrator) RunScan(ctx context.Context, scannerID string, request models.ScanRequest, ownerUserID int64) (models.PassportResponse, error) {
 	id := strings.ToLower(strings.TrimSpace(scannerID))
 	switch id {
@@ -91,12 +88,10 @@ func (o *Orchestrator) RunScan(ctx context.Context, scannerID string, request mo
 	}
 }
 
-// RunSemgrepScenario — совместимость с POST /api/v1/scans/semgrep; предпочтительнее POST /api/v1/scans.
 func (o *Orchestrator) RunSemgrepScenario(ctx context.Context, request models.ScanRequest, ownerUserID int64) (models.PassportResponse, error) {
 	return o.RunScan(ctx, "semgrep", request, ownerUserID)
 }
 
-// RunGitleaksScenario — совместимость с POST /api/v1/scans/gitleaks; предпочтительнее POST /api/v1/scans.
 func (o *Orchestrator) RunGitleaksScenario(ctx context.Context, request models.ScanRequest, ownerUserID int64) (models.PassportResponse, error) {
 	return o.RunScan(ctx, "gitleaks", request, ownerUserID)
 }
@@ -106,7 +101,6 @@ func (o *Orchestrator) RunScaScenario(ctx context.Context, request models.ScanRe
 	return o.RunScan(ctx, "trivy-sca", request, ownerUserID)
 }
 
-// RunDastScenario — POST /api/v1/scans/dast (OWASP ZAP baseline через zap-dast-service).
 func (o *Orchestrator) RunDastScenario(ctx context.Context, request models.ScanRequest, ownerUserID int64) (models.PassportResponse, error) {
 	return o.RunScan(ctx, "zap-dast", request, ownerUserID)
 }
@@ -373,7 +367,6 @@ type semgrepScanRequest struct {
 	GitRepositoryRef string `json:"git_repository_ref,omitempty"`
 }
 
-// DescribeScanTarget — человекочитаемое описание источника для паспорта.
 func DescribeScanTarget(r models.ScanRequest) string {
 	if u := strings.TrimSpace(r.TargetURL); u != "" {
 		return u
@@ -455,12 +448,10 @@ func urlQueryEscape(s string) string {
 	return url.QueryEscape(s)
 }
 
-// KafkaIngestEnabled — публичный ingest может ставить пакет в очередь без ожидания processing.
 func (o *Orchestrator) KafkaIngestEnabled() bool {
 	return o.kafkaIngest != nil
 }
 
-// EnqueueFindings публикует пакет в Kafka и сразу возвращает correlation_id.
 func (o *Orchestrator) EnqueueFindings(ctx context.Context, ingest models.ProcessingIngestRequest) (string, error) {
 	if o.kafkaIngest == nil {
 		return "", fmt.Errorf("kafka ingest not configured")
@@ -468,7 +459,6 @@ func (o *Orchestrator) EnqueueFindings(ctx context.Context, ingest models.Proces
 	return o.kafkaIngest.Publish(ctx, ingest)
 }
 
-// IngestFindings передаёт уже нормализованные находки в processing (Kafka или HTTP).
 // Поле OwnerUserID в payload задаёт владельца для мультиарендности консоли (как в ingest на processing).
 func (o *Orchestrator) IngestFindings(ctx context.Context, ingest models.ProcessingIngestRequest) (models.ProcessingResponse, error) {
 	var ownerHdr int64
@@ -539,7 +529,6 @@ func (o *Orchestrator) fetchGroups(ctx context.Context, ownerUserID int64) ([]mo
 	return result, nil
 }
 
-// CreateGroupTicket создаёт задачу в Jira для одной группы (ручной триггер из консоли).
 func (o *Orchestrator) CreateGroupTicket(ctx context.Context, payload models.TicketRequest) (models.TicketResponse, error) {
 	return o.createTicket(ctx, payload)
 }

@@ -12,7 +12,6 @@ import (
 	"mephi_vkr_asoc/services/api-service/internal/models"
 )
 
-// IngestBridge публикует находки в Kafka; для сценариев сканирования — ожидание ответа в result-топике.
 type IngestBridge struct {
 	brokers     []string
 	ingestTopic string
@@ -40,7 +39,6 @@ func (b *IngestBridge) Close() error {
 	return b.writer.Close()
 }
 
-// Publish ставит пакет в очередь ingest (без ожидания processing).
 func (b *IngestBridge) Publish(ctx context.Context, payload models.ProcessingIngestRequest) (string, error) {
 	corr := uuid.New().String()
 	if err := b.writeIngest(ctx, corr, payload); err != nil {
@@ -49,7 +47,6 @@ func (b *IngestBridge) Publish(ctx context.Context, payload models.ProcessingIng
 	return corr, nil
 }
 
-// PublishAndWait — для POST /api/v1/scans/* (нужен run_id в ответе).
 func (b *IngestBridge) PublishAndWait(ctx context.Context, payload models.ProcessingIngestRequest) (models.ProcessingResponse, error) {
 	corr := uuid.New().String()
 	if err := b.writeIngest(ctx, corr, payload); err != nil {

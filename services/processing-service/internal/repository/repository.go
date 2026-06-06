@@ -13,7 +13,7 @@ type ProcessingRepository interface {
 	InsertFinding(ctx context.Context, finding models.Finding) (int64, error)
 	FindReferenceRecordIDByCVE(ctx context.Context, cve string) (*int64, error)
 	FindReferenceRecordIDByCWE(ctx context.Context, cwe string) (*int64, error)
-	// FindCVEAliasByReferenceRecordID — первый алиас CVE у записи каталога (для обогащения строки уязвимости).
+
 	FindCVEAliasByReferenceRecordID(ctx context.Context, referenceRecordID int64) (string, error)
 	CreateVulnerability(ctx context.Context, vulnerability models.Vulnerability) (int64, bool, error)
 	MergeVulnerabilityCatalog(ctx context.Context, vulnerabilityID int64, cve string, referenceRecordID *int64, correlationStatus string) error

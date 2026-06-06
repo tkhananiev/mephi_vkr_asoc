@@ -10,7 +10,6 @@ import (
 	"mephi_vkr_asoc/services/processing-service/internal/service"
 )
 
-// IngestConsumer читает asoc.findings.ingest и публикует результат в asoc.findings.ingest.result.
 type IngestConsumer struct {
 	brokers     []string
 	ingestTopic string

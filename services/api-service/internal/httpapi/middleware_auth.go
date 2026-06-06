@@ -8,7 +8,6 @@ import (
 	"mephi_vkr_asoc/services/api-service/internal/auth"
 )
 
-// WithAPIKeyOrUserJWT: для /api/* — X-API-Key / Authorization: Bearer <api key> или Bearer <JWT из auth-service asoc-auth> / legacy asoc-api.
 func WithAPIKeyOrUserJWT(apiKey string, jwtSecret []byte, next http.Handler) http.Handler {
 	key := strings.TrimSpace(apiKey)
 	want := []byte(key)

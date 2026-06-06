@@ -10,7 +10,6 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 )
 
-// NewKubernetesClientset: in-cluster SA или kubeconfig из APP_K8S_KUBECONFIG (локальная отладка).
 func NewKubernetesClientset() (kubernetes.Interface, error) {
 	cfg, err := rest.InClusterConfig()
 	if err == nil {

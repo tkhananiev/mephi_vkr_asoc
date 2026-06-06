@@ -16,7 +16,6 @@ var HTTPRequests = promauto.NewCounterVec(
 	[]string{"method", "route", "code"},
 )
 
-// HTTPDuration — латентность ответа api-service (для Grafana loadtest, ingest и др.).
 var HTTPDuration = promauto.NewHistogramVec(
 	prometheus.HistogramOpts{
 		Name:    "asoc_http_request_duration_seconds",

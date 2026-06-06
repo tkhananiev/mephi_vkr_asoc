@@ -10,7 +10,6 @@ import (
 	kafkago "github.com/segmentio/kafka-go"
 )
 
-// EnsureTopics создаёт топики и доводит число партиций до заданного (идемпотентно).
 func EnsureTopics(ctx context.Context, brokers []string, ingestTopic string, ingestPartitions int, resultTopic string, resultPartitions int) error {
 	if len(brokers) == 0 {
 		return errors.New("no kafka brokers")
@@ -123,7 +122,7 @@ func ensureMinPartitions(ctx context.Context, brokers []string, topic string, wa
 	if have >= want {
 		return nil
 	}
-	// Count в kafka-go — целевое общее число партиций (не дельта).
+
 	addr := kafkago.TCP(brokers[0])
 	cli := &kafkago.Client{Addr: addr}
 	resp, err := cli.CreatePartitions(ctx, &kafkago.CreatePartitionsRequest{

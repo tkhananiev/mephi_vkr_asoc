@@ -14,7 +14,6 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
-// Соответствие коротких id (как в UI) → имя Deployment в namespace.
 var k8sDeploymentByService = map[string]string{
 	"api":  "api-service",
 	"auth": "auth-service",
@@ -29,7 +28,6 @@ var k8sDeploymentByService = map[string]string{
 	"dast": "zap-dast-service",
 }
 
-// K8sRunner читает логи подов и делает rollout restart деплоя (как kubectl).
 type K8sRunner struct {
 	Client    kubernetes.Interface
 	Namespace string
@@ -130,7 +128,6 @@ func (k *K8sRunner) Logs(ctx context.Context, serviceID string, tail int) ([]byt
 	return out, nil
 }
 
-// Restart implements Backend — strategic-merge patch deployment (kubectl rollout restart).
 func (k *K8sRunner) Restart(ctx context.Context, serviceID string) ([]byte, error) {
 	dep, ok := k.resolveDeployment(serviceID)
 	if !ok {

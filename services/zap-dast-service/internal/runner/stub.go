@@ -8,7 +8,6 @@ import (
 	"time"
 )
 
-// runHTTPProbeStub — лёгкая проверка доступности цели без OWASP ZAP (APP_ZAP_USE_STUB=true).
 func runHTTPProbeStub(ctx context.Context, targetURL string) ([]byte, error) {
 	u, err := validateTargetURL(targetURL)
 	if err != nil {

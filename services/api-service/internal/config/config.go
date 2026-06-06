@@ -25,23 +25,23 @@ type Config struct {
 	AuthAPIKey              string
 	RequireKafkaForFindings bool
 
-	// Путь JSON-файла с «дополнительными» сканерами (админ PUT). Пусто — только память между рестартами.
+
 	IntegrationOverlayPath string
 
-	// JWT только для проверки Bearer-токена (тот же секрет, что и у auth-service). Без секрета — только API-ключ для /api/*.
+
 	JWTSecret string
 	JWTTTL    string
 
-	// Опасно: доступ к Docker CLI на хосте (только compose-стенд с смонтированным /var/run/docker.sock). Выключено по умолчанию.
+
 	DockerOpsEnabled bool
 	DockerCLIPath    string
 
-	// Оркестратор: логи подов и rollout restart деплоев (нужен RBAC и ServiceAccount). Приоритетнее Docker CLI.
+
 	K8SOpsEnabled   bool
 	K8SNamespace    string
 	K8SPodContainer string // обычно app (см. workloads.yaml)
 
-	// PostgreSQL: продукты консоли (core.console_products). Пусто — эндпойнты продуктов вернут 503.
+
 	PostgresDSN string
 }
 

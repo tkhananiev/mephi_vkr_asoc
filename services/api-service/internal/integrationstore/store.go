@@ -15,7 +15,6 @@ import (
 	"unicode"
 )
 
-// Item — публичное описание интеграции (совпадает с JSON для GET /api/v1/integrations).
 type Item struct {
 	ID           string   `json:"id"`
 	Kind         string   `json:"kind"`
@@ -30,23 +29,22 @@ type Item struct {
 	ConsolePath  string   `json:"console_path,omitempty"`
 	Capabilities []string `json:"capabilities,omitempty"`
 	Note         string   `json:"note,omitempty"`
-	// NetworkHost — краткая сводка или устаревшее положение; может синхронизироваться с hostname/ip:port.
+
 	NetworkHost string `json:"network_host,omitempty"`
-	// NetworkHostname, NetworkIP, NetworkPort — сетевое расположение (справочно для оператора).
+
 	NetworkHostname string `json:"network_hostname,omitempty"`
 	NetworkIP       string `json:"network_ip,omitempty"`
 	NetworkPort     string `json:"network_port,omitempty"`
-	// ScannerInvokeURL — полный URL POST запуска скана (доп. сканеры из админ-каталога).
+
 	ScannerInvokeURL string `json:"scanner_invoke_url,omitempty"`
-	// InvokeHint — как запускать вручную: CLI, поля POST и т.д. (только документация для админов).
+
 	InvokeHint string `json:"invoke_hint,omitempty"`
-	// RunnerCommand — шаблон shell для generic-scan-runner (плейсхолдеры {target_path}, {git_repository_url}, …).
+
 	RunnerCommand string `json:"runner_command,omitempty"`
-	// InvokePayloadTemplate — пример/шаблон тела POST (документация и настройка для админов).
+
 	InvokePayloadTemplate string `json:"invoke_payload_template,omitempty"`
 }
 
-// builtinCatalog жёстко зашит в api-service; доп. строки — только через overlay (PUT админки).
 var builtinCatalog = []Item{
 	{
 		ID:              "semgrep",
@@ -125,7 +123,6 @@ type Store struct {
 	additional []Item
 }
 
-// New загружает «дополнительные» сканеры с диска, если указан overlayPath и файл существует.
 func New(overlayPath string) (*Store, error) {
 	path := strings.TrimSpace(overlayPath)
 	s := &Store{path: path}
@@ -228,7 +225,6 @@ func validateID(id string) error {
 	return nil
 }
 
-// Validate проверка одной записи перед сохранением.
 func Validate(it Item, reserved map[string]struct{}) error {
 	if err := validateID(it.ID); err != nil {
 		return err
@@ -335,7 +331,6 @@ func (s *Store) persistLocked() error {
 	return nil
 }
 
-// ListMerged — встроенные в фиксированном порядке, затем «дополнительные», отсортированные по id.
 func (s *Store) ListMerged() []Item {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -348,7 +343,6 @@ func (s *Store) ListMerged() []Item {
 	return out
 }
 
-// AdminRow — элемент ответа GET /api/v1/admin/integrations.
 type AdminRow struct {
 	Source      string `json:"source"` // builtin | additional
 	Integration Item   `json:"integration"`
@@ -373,12 +367,10 @@ func (s *Store) AdminList() []AdminRow {
 	return rows
 }
 
-// HasPersistentOverlay true, если при старте задан путь к JSON overlay (монтирование тома сохранит доп. сканеры).
 func (s *Store) HasPersistentOverlay() bool {
 	return strings.TrimSpace(s.path) != ""
 }
 
-// ReplaceAdditional полностью заменяет «дополнительные» сканеры (не трогая встроенные).
 func (s *Store) ReplaceAdditional(xs []Item) error {
 	norm := normalizeItems(xs)
 	reserved := builtinIDs()
@@ -391,7 +383,6 @@ func (s *Store) ReplaceAdditional(xs []Item) error {
 	return s.persistLocked()
 }
 
-// LookupAdditional возвращает запись из дополнительного каталога по scanner_id (регистронезависимо).
 func (s *Store) LookupAdditional(scannerID string) (Item, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -404,7 +395,6 @@ func (s *Store) LookupAdditional(scannerID string) (Item, bool) {
 	return Item{}, false
 }
 
-// LookupDynamicInvoke возвращает URL POST, имя сканера и опционально runner_command (generic-scan-runner).
 func (s *Store) LookupDynamicInvoke(scannerID string) (invokeURL string, scannerName string, runnerCommand string, ok bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

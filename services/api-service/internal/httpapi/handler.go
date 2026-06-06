@@ -81,9 +81,7 @@ func (h *Handler) handleHealth(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
-// handlePublicFindingsIngest — универсальный приём нормализованных находок (любой сканер/CI),
 // тот же JSON, что internal POST processing /api/v1/findings/ingest. Владелец выставляется только
-// из JWT пользователя консоли; поле owner_user_id в теле игнорируется (не доверяем клиенту).
 // Поле console_product_id допускается только с JWT пользователя и только если продукт принадлежит ему;
 // с одним API-ключом отбрасывается.
 func (h *Handler) handlePublicFindingsIngest(w http.ResponseWriter, r *http.Request) {
@@ -158,7 +156,6 @@ func normalizeConsoleProductID(p *int64) *int64 {
 	return p
 }
 
-// assertConsoleProductAccess — если pid задан, нужен JWT пользователя консоли и владение продуктом.
 func (h *Handler) assertConsoleProductAccess(w http.ResponseWriter, r *http.Request, pid *int64) bool {
 	if pid == nil {
 		return true
@@ -226,7 +223,6 @@ func (h *Handler) handleUnifiedScan(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusAccepted, passport)
 }
 
-// prepareScannerTarget подставляет дефолты и проверяет цель в зависимости от scanner_id.
 func (h *Handler) prepareScannerTarget(scannerID string, request *models.ScanRequest) error {
 	sid := strings.ToLower(strings.TrimSpace(scannerID))
 	switch sid {

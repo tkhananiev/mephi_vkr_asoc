@@ -8,7 +8,6 @@ import (
 	"time"
 )
 
-// Имена контейнеров из deploy/compose.yaml (локально).
 var composeContainerByService = map[string]string{
 	"api":  "mephi-vkr-api-service",
 	"auth": "mephi-vkr-auth-service",
@@ -25,7 +24,6 @@ var composeContainerByService = map[string]string{
 
 const maxLogBytes = 512 * 1024
 
-// Runner выполняет docker logs / docker restart только для контейнеров из белого списка.
 type Runner struct {
 	CLI string
 }

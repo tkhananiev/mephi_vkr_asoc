@@ -10,7 +10,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// connectPostgresWithRetry ждёт готовности PostgreSQL при старте compose (depends_on не ждёт accept на порту).
 func connectPostgresWithRetry(parentCtx context.Context, dsn string) (*pgxpool.Pool, error) {
 	const maxWait = 90 * time.Second
 	start := time.Now()

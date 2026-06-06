@@ -6,7 +6,6 @@ import (
 	"strings"
 )
 
-// PurgeScannerScope удаляет находки и связанные уязвимости/группы от прошлых прогонов того же
 // сканера в рамках owner_user_id и console_product_id (новый прогон = снимок, без накопления).
 func (r *Repository) PurgeScannerScope(ctx context.Context, scannerName string, ownerUserID *int64, consoleProductID *int64) error {
 	scanner := strings.TrimSpace(scannerName)
@@ -20,7 +19,7 @@ func (r *Repository) PurgeScannerScope(ctx context.Context, scannerName string, 
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	// 1) Ссылки группа↔уязвимость для строк, которые исчезнут после удаления находок сканера.
+
 	_, err = tx.Exec(ctx, `
 		DELETE FROM core.group_vulnerabilities gv
 		USING core.vulnerability_groups g
@@ -43,7 +42,7 @@ func (r *Repository) PurgeScannerScope(ctx context.Context, scannerName string, 
 		return err
 	}
 
-	// 2) Находки и связи находка↔уязвимость прошлых прогонов этого сканера.
+
 	_, err = tx.Exec(ctx, `
 		DELETE FROM core.finding_vulnerabilities fv
 		USING core.findings f, core.processing_runs pr
@@ -69,7 +68,7 @@ func (r *Repository) PurgeScannerScope(ctx context.Context, scannerName string, 
 		return err
 	}
 
-	// 3) Уязвимости без находок в том же scope (user + product); другие сканеры в scope сохраняют строку.
+
 	_, err = tx.Exec(ctx, `
 		DELETE FROM core.vulnerabilities v
 		WHERE NOT EXISTS (
@@ -86,7 +85,7 @@ func (r *Repository) PurgeScannerScope(ctx context.Context, scannerName string, 
 		return err
 	}
 
-	// 4) Пустые группы владельца и тикеты Jira на них.
+
 	_, err = tx.Exec(ctx, `
 		DELETE FROM integration.ticket_links tl
 		USING core.vulnerability_groups g
@@ -117,7 +116,7 @@ func (r *Repository) PurgeScannerScope(ctx context.Context, scannerName string, 
 		return err
 	}
 
-	// 5) Пустые прогоны этого сканера в scope (история прогона не копится).
+
 	_, err = tx.Exec(ctx, `
 		DELETE FROM core.processing_runs pr
 		WHERE lower(btrim(pr.source_name)) = lower(btrim($1))

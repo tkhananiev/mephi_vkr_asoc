@@ -5,7 +5,6 @@ import (
 	"strings"
 )
 
-// jiraWikiToHTML — упрощённый рендер wiki-таблиц и заголовков h3. для консоли mock.
 func jiraWikiToHTML(desc string) string {
 	desc = strings.TrimSpace(desc)
 	if desc == "" {

@@ -18,7 +18,6 @@ func New(binary, defaultConfig string) *Runner {
 	return &Runner{binary: binary, config: defaultConfig}
 }
 
-// Run выполняет semgrep scan; при ненулевом коде выхода всё равно пытается разобрать JSON
 // (некоторые версии semgrep завершаются с ошибкой при наличии находок).
 func (r *Runner) Run(ctx context.Context, targetPath, configOverride string) ([]byte, error) {
 	cfg := r.config
@@ -36,7 +35,7 @@ func (r *Runner) Run(ctx context.Context, targetPath, configOverride string) ([]
 		}
 		return nil, fmt.Errorf("semgrep output does not contain json payload: %s", string(output))
 	}
-	// Semgrep иногда дописывает после JSON предупреждения/ANSI — читаем ровно одно JSON-значение.
+
 	dec := json.NewDecoder(bytes.NewReader(output[jsonStart:]))
 	dec.UseNumber()
 	var payload json.RawMessage
@@ -48,7 +47,7 @@ func (r *Runner) Run(ctx context.Context, targetPath, configOverride string) ([]
 	}
 
 	if cmdErr != nil {
-		// JSON валиден — считаем запуск успешным для API (находки в results).
+	
 		return payload, nil
 	}
 	return payload, nil

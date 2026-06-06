@@ -11,7 +11,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// ErrProductNotFound — строка не найдена или не принадлежит владельцу.
 var ErrProductNotFound = errors.New("console product not found")
 
 type ConsoleProduct struct {
@@ -44,7 +43,6 @@ func NewStore(pool *pgxpool.Pool) *Store {
 	return &Store{pool: pool}
 }
 
-// NormalizeBranchRefs: приоритет у непустого списка веток; иначе одна строка repository_ref или main.
 func NormalizeBranchRefs(repositoryRef string, branchList []string) []string {
 	seen := make(map[string]struct{})
 	var out []string
@@ -107,7 +105,6 @@ func (s *Store) ListByOwner(ctx context.Context, ownerID int64) ([]ConsoleProduc
 	return out, rows.Err()
 }
 
-// ProductOwnedBy — продукт существует и принадлежит указанному пользователю консоли.
 func (s *Store) ProductOwnedBy(ctx context.Context, productID, ownerUserID int64) (bool, error) {
 	var one int32
 	err := s.pool.QueryRow(ctx, `
@@ -166,7 +163,6 @@ func (s *Store) Create(ctx context.Context, ownerID int64, in CreateInput) (Cons
 	return p, nil
 }
 
-// Update — полная замена редактируемых полей; productID должен принадлежать ownerID.
 func (s *Store) Update(ctx context.Context, ownerID, productID int64, in CreateInput) (ConsoleProduct, error) {
 	refs := NormalizeBranchRefs(in.RepositoryRef, in.RepositoryBranchRefs)
 	ref := refs[0]
@@ -221,7 +217,6 @@ func (s *Store) Update(ctx context.Context, ownerID, productID int64, in CreateI
 	return p, nil
 }
 
-// Delete удаляет продукт только если он принадлежит ownerID (processing_runs.console_product_id → SET NULL по FK).
 func (s *Store) Delete(ctx context.Context, ownerID, productID int64) error {
 	tag, err := s.pool.Exec(ctx, `
 		DELETE FROM core.console_products WHERE id = $1 AND owner_user_id = $2

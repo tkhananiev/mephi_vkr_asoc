@@ -17,12 +17,11 @@ import (
 
 const (
 	maxResultsPerPageNVD = 2000
-	// NVD: без ключа ~5 запросов / 30 с; с ключом ~50 / 30 с.
+
 	throttleNoAPIKey   = 6 * time.Second
 	throttleWithAPIKey = 650 * time.Millisecond
 )
 
-// Из поля weaknesses.description (текст вида "CWE-79 …").
 var nvdWeaknessCWEIDRe = regexp.MustCompile(`(?i)CWE-\d+`)
 
 type Client struct {
@@ -61,9 +60,7 @@ type apiResponse struct {
 	} `json:"vulnerabilities"`
 }
 
-// New создаёт клиент NVD API 2.0. apiKey — опционально (заголовок apiKey, выше лимит запросов).
 // pageSize — до 2000; maxPages — ограничение числа страниц за один вызов Fetch (0 = все).
-// requestTimeout — лимит на один HTTP-запрос (чтение тела до 2000 CVE может занимать минуты).
 func New(baseURL, apiKey string, pageSize, maxPages int, requestTimeout time.Duration) *Client {
 	if pageSize <= 0 || pageSize > maxResultsPerPageNVD {
 		pageSize = maxResultsPerPageNVD
@@ -121,14 +118,12 @@ func (c *Client) listURL(startIndex int, modStart, modEnd *time.Time) string {
 	return c.baseURL + "?" + v.Encode()
 }
 
-// SyncAllPages загружает все страницы NVD без накопления всего каталога в памяти (onPage вызывается на каждую страницу).
 func (c *Client) SyncAllPages(ctx context.Context, onPage func([]models.SourceRecord) error) error {
 	return c.syncAllPages(ctx, func(startIndex int) string {
 		return c.listURL(startIndex, nil, nil)
 	}, onPage)
 }
 
-// SyncAllPagesModRange — только CVE, у которых lastModified попадает в [modStart, modEnd] (для инкрементального синка).
 func (c *Client) SyncAllPagesModRange(ctx context.Context, modStart, modEnd time.Time, onPage func([]models.SourceRecord) error) error {
 	ms, me := modStart, modEnd
 	return c.syncAllPages(ctx, func(startIndex int) string {
@@ -174,10 +169,10 @@ func (c *Client) syncAllPages(ctx context.Context, urlFor func(int) string, onPa
 		case total > 0:
 			done = nextStart >= total
 		case payload.ResultsPerPage > 0:
-			// При totalResults=0 в JSON не сравниваем nextStart >= total (иначе 20 >= 0 → ложный конец после первой страницы).
+		
 			done = len(chunk) < payload.ResultsPerPage
 		default:
-			// Нет ни total, ни resultsPerPage — идём, пока не придёт пустой chunk.
+		
 			done = false
 		}
 
@@ -242,7 +237,6 @@ func (c *Client) doGET(ctx context.Context, url string) (*apiResponse, error) {
 	return &payload, nil
 }
 
-// cweAliasesFromNVDWeaknesses — уникальные идентификаторы CWE-NNN из блока weaknesses ответа NVD 2.0.
 func cweAliasesFromNVDWeaknesses(weaknesses []struct {
 	Description []struct {
 		Value string `json:"value"`

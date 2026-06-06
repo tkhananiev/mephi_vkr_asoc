@@ -39,10 +39,8 @@ type rssItem struct {
 var bduIDPattern = regexp.MustCompile(`BDU:\d+`)
 var cvePattern = regexp.MustCompile(`CVE-\d{4}-\d+`)
 
-// bduFeedUserAgent ФСТЭК и ряд госсайтов отдают 403 на дефолтный Go-http-client.
 const bduFeedUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
 
-// NewHTTPClient — общий HTTP-клиент для ресурсов bdu.fstec.ru (тот же TLS, что у RSS).
 func NewHTTPClient(skipTLSVerify bool, rootCAPEMPath string, timeout time.Duration) (*http.Client, error) {
 	tlsConfig, err := bduTLSConfig(skipTLSVerify, rootCAPEMPath)
 	if err != nil {
@@ -59,7 +57,6 @@ func NewHTTPClient(skipTLSVerify bool, rootCAPEMPath string, timeout time.Durati
 	}, nil
 }
 
-// New создаёт клиент БДУ. skipTLSVerify — пропуск проверки сертификата (нужно, если УЦ ФСТЭК нет в системном хранилище).
 // rootCAPEMPath — путь к PEM с дополнительным корневым/промежуточным УЦ; если не пусто, используется доверенный пул вместо skipTLSVerify.
 func New(feedURL string, skipTLSVerify bool, rootCAPEMPath string) (*Client, error) {
 	httpClient, err := NewHTTPClient(skipTLSVerify, rootCAPEMPath, 30*time.Second)
@@ -103,7 +100,6 @@ func (c *Client) Fetch(ctx context.Context) ([]models.SourceRecord, error) {
 	return c.demoFallbackRecord(), nil
 }
 
-// bduFeedURLsToTry сначала конфиг, затем автозамена /feed → /ubi/vul/rss для старых деплоев.
 func bduFeedURLsToTry(primary string) []string {
 	u := strings.TrimSpace(primary)
 	if u == "" {
@@ -116,7 +112,6 @@ func bduFeedURLsToTry(primary string) []string {
 	return out
 }
 
-// bduFSTECVulRSSFallback /feed на bdu.fstec.ru — HTML-список каналов; лента уязвимостей — /ubi/vul/rss.
 func bduFSTECVulRSSFallback(feedURL string) string {
 	if !strings.Contains(feedURL, "bdu.fstec.ru") {
 		return ""

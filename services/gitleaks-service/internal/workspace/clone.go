@@ -12,7 +12,6 @@ import (
 	"strings"
 )
 
-// ValidateGitRemoteURL — допуск только http(s) или ssh git@host:path без file:// и без явного SSRF-хоста.
 func ValidateGitRemoteURL(raw string) error {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
@@ -45,7 +44,6 @@ func ValidateGitRemoteURL(raw string) error {
 	return nil
 }
 
-// SecureSubdir резолвит относительный подкаталог внутри корня клона без выхода вверх.
 func SecureSubdir(repoRoot string, relative string) (string, error) {
 	rr := filepath.Clean(repoRoot)
 	rel := strings.Trim(strings.TrimSpace(strings.ReplaceAll(relative, "\\", "/")), "/")
@@ -75,7 +73,6 @@ func randomSuffix() string {
 	return hex.EncodeToString(b)
 }
 
-// PrepareGitWorkspace делает shallow clone в уникальный каталог под workRoot, возвращает каталог скана и удаление.
 func PrepareGitWorkspace(ctx context.Context, workRoot string, repoURL string, gitRef string, subDirInRepo string) (scanDir string, cleanup func(), err error) {
 	if err := ValidateGitRemoteURL(repoURL); err != nil {
 		return "", nil, err

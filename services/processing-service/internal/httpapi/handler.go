@@ -288,7 +288,6 @@ func parseReportTimeFilter(v url.Values, key string, endOfDayInclusive bool) *ti
 	return &u
 }
 
-// parseReportFilter читает опциональные фильтры отчёта из query.
 func parseReportFilter(v url.Values) *models.VulnerabilityReportFilter {
 	get := func(key string) *string {
 		raw := strings.TrimSpace(v.Get(key))

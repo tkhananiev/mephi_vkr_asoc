@@ -48,7 +48,7 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 	xlsxViaURL := strings.TrimSpace(cfg.BDUVullistXLSXURL) != ""
 	zipOK := zipViaLocal || zipViaURL
 	xlsxOK := xlsxViaLocal || xlsxViaURL
-	// HTTP нужен для URL и как fallback, если локальные пути заданы (например /bdu-import/… в k8s), но файлов на томе ещё нет.
+
 	needsBulkHTTP := zipViaURL || xlsxViaURL
 
 	if cfg.BDUBulkEnabled && zipOK && xlsxOK {

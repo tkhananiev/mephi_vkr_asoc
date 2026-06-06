@@ -9,7 +9,6 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
-// Issuer должен совпадать с auth-service (/internal/token).
 const Issuer = "asoc-auth"
 
 type Claims struct {
@@ -20,7 +19,6 @@ type Claims struct {
 	jwt.RegisteredClaims
 }
 
-// ParseJWT — проверка HS256 JWT, выписанных auth-service.
 func ParseJWT(secret []byte, tokenStr string) (*Claims, error) {
 	tokenStr = strings.TrimSpace(tokenStr)
 	if tokenStr == "" {
@@ -45,7 +43,6 @@ func ParseJWT(secret []byte, tokenStr string) (*Claims, error) {
 	return c, nil
 }
 
-// Issue локально только для возможных unit-тестов; продакшен выдаёт токены через auth-service.
 func Issue(secret []byte, userID int64, email, displayName, role string, ttl time.Duration) (string, error) {
 	if len(secret) < 32 {
 		return "", errors.New("jwt secret must be at least 32 bytes")

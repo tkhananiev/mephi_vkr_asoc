@@ -117,7 +117,6 @@ func (r *Repository) FindCVEAliasByReferenceRecordID(ctx context.Context, refere
 	return strings.TrimSpace(alias), nil
 }
 
-// normalizeCWEAliasValue приводит к виду CWE-<id> для сопоставления с catalog.reference_aliases.
 func normalizeCWEAliasValue(raw string) string {
 	s := strings.TrimSpace(raw)
 	if s == "" {
@@ -167,7 +166,6 @@ func (r *Repository) CreateVulnerability(ctx context.Context, vulnerability mode
 	return id, false, nil
 }
 
-// MergeVulnerabilityCatalog — при повторных прогонах не создаём дубликаты по сигнатуре (CreateVulnerability), но может
 // «дорос» каталог (CWE aliased в NVD). Тогда дорисовываем cve_id / reference_record_id у существующей строки.
 func (r *Repository) MergeVulnerabilityCatalog(ctx context.Context, vulnerabilityID int64, cve string, referenceRecordID *int64, correlationStatus string) error {
 	var ref pgtype.Int8
