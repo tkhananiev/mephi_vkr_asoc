@@ -136,9 +136,13 @@ func (o *Orchestrator) passportAfterFindings(ctx context.Context, request models
 		return models.PassportResponse{}, err
 	}
 
-	groups, err := o.fetchGroups(ctx, ownerUserID)
-	if err != nil {
-		return models.PassportResponse{}, err
+	groups := []models.GroupResponse{}
+	if ownerUserID > 0 {
+		var err error
+		groups, err = o.fetchGroups(ctx, ownerUserID)
+		if err != nil {
+			return models.PassportResponse{}, err
+		}
 	}
 
 	scanLabel := DescribeScanTarget(request)
@@ -561,4 +565,3 @@ func (o *Orchestrator) createTicket(ctx context.Context, payload models.TicketRe
 	}
 	return result, nil
 }
-
