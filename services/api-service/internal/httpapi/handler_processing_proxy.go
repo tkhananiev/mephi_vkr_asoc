@@ -42,7 +42,14 @@ func (h *Handler) ensureConsoleProductReportAccess(w http.ResponseWriter, r *htt
 		return false
 	}
 	if cp == nil {
-		return true
+		if _, ok := ConsoleUserFromRequest(r); ok {
+			return true
+		}
+		if _, ok := AdminUserFromRequest(r); ok {
+			return true
+		}
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "console user or admin JWT required"})
+		return false
 	}
 	uid, ok := ConsoleUserFromRequest(r)
 	if !ok {
