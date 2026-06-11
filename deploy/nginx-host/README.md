@@ -35,14 +35,15 @@ sudo nginx -t && sudo systemctl reload nginx
 
 | Путь (prefix) | Сервис | localhost:порт |
 |---------------|--------|----------------|
-| `/api/v1/scans`, `/health`, `/openapi.yaml`, `/swagger`, `/api/v1/groups`, `/api/v1/report`, `/api/v1/console`, см. `asoc-site.conf` | api-service | 8080 |
+| `/api/v1/scans`, `/health`, `/openapi.yaml`, `/swagger`, `/api/v1/groups`, `/api/v1/report`, `/api/v1/console`, `/api/v1/sync`, см. `asoc-site.conf` | api-service | 8080 |
+| `/auth` | auth-service | 8091 |
 | `/api/v1/findings/ingest` | api-service (ингест с API-ключом/JWT; дальше Kafka или HTTP в processing) | 8080 |
-| `/api/v1/sync` | reference-data-service | 8081 |
 | `/api/v1/findings` (кроме `…/ingest`, если задан более длинный `location`) | processing-service | 8082 |
-| `/api/v1/tickets` | jira-integration-service | 8083 |
 | `/health/reference`, `/health/processing`, `/health/jira`, `/health/semgrep` | агрегированные `/health` для UI | 8081–8085 |
 
-В `asoc-site.conf` для префикса `/api/v1/sync` заданы увеличенные таймауты (до 3600s) — это важно для **`POST /api/v1/sync/bdu/bulk`** (полный импорт БДУ) и длинного **`POST /api/v1/sync/nvd`** без `cve_id`.
+В `asoc-site.conf` префикс `/api/v1/sync` идёт через api-service, поэтому требует тот же `Authorization`/`X-API-Key`, что остальные API-методы, а уже api-service проксирует запрос в reference-data-service. Для этого префикса заданы увеличенные таймауты (до 3600s) — это важно для **`POST /api/v1/sync/bdu/bulk`** (полный импорт БДУ) и длинного **`POST /api/v1/sync/nvd`** без `cve_id`.
+
+Публичный `/api/v1/tickets` не проксируется напрямую в jira-integration-service: создание задач выполняется через авторизованный маршрут api-service `/api/v1/groups/{id}/jira-ticket`.
 
 Убедись, что контейнеры с этими портами подняты на той же машине.
 

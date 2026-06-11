@@ -21,8 +21,10 @@ type Handler struct {
 	jwtSecret             []byte
 	podOps                ops.Backend
 	integrationStore      *integrationstore.Store
+	referenceURL          string
 	processingURL         string
 	httpUpstream          *http.Client
+	longHTTPUpstream      *http.Client
 	productStore          *products.Store
 }
 
@@ -32,6 +34,7 @@ func New(
 	jwtSecret []byte,
 	podOps ops.Backend,
 	integrations *integrationstore.Store,
+	referenceURL string,
 	processingURL string,
 	productStore *products.Store,
 ) *Handler {
@@ -43,8 +46,10 @@ func New(
 		jwtSecret:             jwtSecret,
 		podOps:                podOps,
 		integrationStore:      integrations,
+		referenceURL:          strings.TrimRight(referenceURL, "/"),
 		processingURL:         strings.TrimRight(processingURL, "/"),
 		httpUpstream:          up,
+		longHTTPUpstream:      defaultLongHTTPUpstream(),
 		productStore:          productStore,
 	}
 }
@@ -67,6 +72,8 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/v1/groups", h.handleGroupsRoute)
 	mux.HandleFunc("/api/v1/groups/", h.handleGroupsRoute)
 	mux.HandleFunc("/api/v1/report/vulnerabilities", h.handleReportVulnerabilitiesProxy)
+	mux.HandleFunc("/api/v1/sync", h.handleReferenceSyncProxy)
+	mux.HandleFunc("/api/v1/sync/", h.handleReferenceSyncProxy)
 	mux.HandleFunc("/api/v1/findings/ingest", h.handlePublicFindingsIngest)
 	mux.HandleFunc("/api/v1/scans", h.handleUnifiedScan)
 	mux.HandleFunc("/api/v1/scans/semgrep", h.handleSemgrepScan)

@@ -8,6 +8,7 @@ import (
 
 type Config struct {
 	HTTPPort                string
+	ReferenceServiceURL     string
 	ProcessingServiceURL    string
 	JiraServiceURL          string
 	SemgrepServiceURL       string
@@ -25,22 +26,17 @@ type Config struct {
 	AuthAPIKey              string
 	RequireKafkaForFindings bool
 
-
 	IntegrationOverlayPath string
-
 
 	JWTSecret string
 	JWTTTL    string
 
-
 	DockerOpsEnabled bool
 	DockerCLIPath    string
-
 
 	K8SOpsEnabled   bool
 	K8SNamespace    string
 	K8SPodContainer string // обычно app (см. workloads.yaml)
-
 
 	PostgresDSN string
 }
@@ -48,6 +44,7 @@ type Config struct {
 func Load() Config {
 	return Config{
 		HTTPPort:                getEnv("APP_HTTP_PORT", "8080"),
+		ReferenceServiceURL:     getEnv("APP_REFERENCE_SERVICE_URL", "http://localhost:8081"),
 		ProcessingServiceURL:    getEnv("APP_PROCESSING_SERVICE_URL", "http://localhost:8082"),
 		JiraServiceURL:          getEnv("APP_JIRA_SERVICE_URL", "http://localhost:8083"),
 		SemgrepServiceURL:       getEnv("APP_SEMGREP_SERVICE_URL", "http://localhost:8085"),
