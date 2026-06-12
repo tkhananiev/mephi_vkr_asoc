@@ -19,7 +19,6 @@ func (r *Repository) PurgeScannerScope(ctx context.Context, scannerName string, 
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-
 	_, err = tx.Exec(ctx, `
 		DELETE FROM core.group_vulnerabilities gv
 		USING core.vulnerability_groups g
@@ -41,7 +40,6 @@ func (r *Repository) PurgeScannerScope(ctx context.Context, scannerName string, 
 	if err != nil {
 		return err
 	}
-
 
 	_, err = tx.Exec(ctx, `
 		DELETE FROM core.finding_vulnerabilities fv
@@ -68,23 +66,17 @@ func (r *Repository) PurgeScannerScope(ctx context.Context, scannerName string, 
 		return err
 	}
 
-
 	_, err = tx.Exec(ctx, `
 		DELETE FROM core.vulnerabilities v
 		WHERE NOT EXISTS (
 			SELECT 1
 			FROM core.finding_vulnerabilities fv
-			INNER JOIN core.findings f ON f.id = fv.finding_id
-			INNER JOIN core.processing_runs pr ON pr.id = f.processing_run_id
 			WHERE fv.vulnerability_id = v.id
-			  AND ($2::bigint IS NULL OR pr.owner_user_id IS NOT DISTINCT FROM $2::bigint)
-			  AND ($3::bigint IS NULL OR pr.console_product_id IS NOT DISTINCT FROM $3::bigint)
 		)
-	`, ownerUserID, consoleProductID)
+	`)
 	if err != nil {
 		return err
 	}
-
 
 	_, err = tx.Exec(ctx, `
 		DELETE FROM integration.ticket_links tl
@@ -94,8 +86,8 @@ func (r *Repository) PurgeScannerScope(ctx context.Context, scannerName string, 
 			SELECT 1 FROM core.group_vulnerabilities gv WHERE gv.group_id = g.id
 		  )
 		  AND (
-			$2::bigint IS NULL
-			OR g.group_key LIKE ('u:' || $2::bigint::text || ':%')
+			$1::bigint IS NULL
+			OR g.group_key LIKE ('u:' || $1::bigint::text || ':%')
 		  )
 	`, ownerUserID)
 	if err != nil {
@@ -108,14 +100,13 @@ func (r *Repository) PurgeScannerScope(ctx context.Context, scannerName string, 
 			SELECT 1 FROM core.group_vulnerabilities gv WHERE gv.group_id = g.id
 		)
 		  AND (
-			$2::bigint IS NULL
-			OR g.group_key LIKE ('u:' || $2::bigint::text || ':%')
+			$1::bigint IS NULL
+			OR g.group_key LIKE ('u:' || $1::bigint::text || ':%')
 		  )
 	`, ownerUserID)
 	if err != nil {
 		return err
 	}
-
 
 	_, err = tx.Exec(ctx, `
 		DELETE FROM core.processing_runs pr

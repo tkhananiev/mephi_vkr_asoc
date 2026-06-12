@@ -93,21 +93,28 @@ func (h *Handler) handleRun(w http.ResponseWriter, r *http.Request) {
 
 func expandCommand(tpl string, body runRequest) string {
 	repl := []string{
-		"{target_path}", strings.TrimSpace(body.TargetPath),
-		"{TARGET_PATH}", strings.TrimSpace(body.TargetPath),
-		"{scanner_name}", strings.TrimSpace(body.ScannerName),
-		"{SCANNER_NAME}", strings.TrimSpace(body.ScannerName),
-		"{git_repository_url}", strings.TrimSpace(body.GitRepositoryURL),
-		"{GIT_REPOSITORY_URL}", strings.TrimSpace(body.GitRepositoryURL),
-		"{git_repository_ref}", strings.TrimSpace(body.GitRepositoryRef),
-		"{GIT_REPOSITORY_REF}", strings.TrimSpace(body.GitRepositoryRef),
-		"{semgrep_config}", strings.TrimSpace(body.SemgrepConfig),
-		"{SEMGREP_CONFIG}", strings.TrimSpace(body.SemgrepConfig),
-		"{scanner_id}", strings.TrimSpace(body.ScannerID),
-		"{SCANNER_ID}", strings.TrimSpace(body.ScannerID),
+		"{target_path}", shellQuote(strings.TrimSpace(body.TargetPath)),
+		"{TARGET_PATH}", shellQuote(strings.TrimSpace(body.TargetPath)),
+		"{scanner_name}", shellQuote(strings.TrimSpace(body.ScannerName)),
+		"{SCANNER_NAME}", shellQuote(strings.TrimSpace(body.ScannerName)),
+		"{git_repository_url}", shellQuote(strings.TrimSpace(body.GitRepositoryURL)),
+		"{GIT_REPOSITORY_URL}", shellQuote(strings.TrimSpace(body.GitRepositoryURL)),
+		"{git_repository_ref}", shellQuote(strings.TrimSpace(body.GitRepositoryRef)),
+		"{GIT_REPOSITORY_REF}", shellQuote(strings.TrimSpace(body.GitRepositoryRef)),
+		"{semgrep_config}", shellQuote(strings.TrimSpace(body.SemgrepConfig)),
+		"{SEMGREP_CONFIG}", shellQuote(strings.TrimSpace(body.SemgrepConfig)),
+		"{scanner_id}", shellQuote(strings.TrimSpace(body.ScannerID)),
+		"{SCANNER_ID}", shellQuote(strings.TrimSpace(body.ScannerID)),
 	}
 	r := strings.NewReplacer(repl...)
 	return r.Replace(tpl)
+}
+
+func shellQuote(s string) string {
+	if s == "" {
+		return "''"
+	}
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
 func truncate(s string, n int) string {
