@@ -53,6 +53,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/health", h.handleHealth)
 	mux.HandleFunc("/api/v1/integrations", h.handleIntegrationsList)
 	mux.HandleFunc("/api/v1/admin/integrations", h.handleAdminIntegrations)
+	mux.HandleFunc("/api/v1/console/repository-branches", h.handleConsoleRepositoryBranches)
 	mux.HandleFunc("/api/v1/console/products/", h.handleConsoleProductByPath)
 	mux.HandleFunc("/api/v1/console/products", func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
@@ -66,6 +67,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	})
 	mux.HandleFunc("/api/v1/groups", h.handleGroupsRoute)
 	mux.HandleFunc("/api/v1/groups/", h.handleGroupsRoute)
+	mux.HandleFunc("/api/v1/report/vulnerabilities/stats", h.handleReportVulnerabilityStatsProxy)
 	mux.HandleFunc("/api/v1/report/vulnerabilities", h.handleReportVulnerabilitiesProxy)
 	mux.HandleFunc("/api/v1/findings/ingest", h.handlePublicFindingsIngest)
 	mux.HandleFunc("/api/v1/scans", h.handleUnifiedScan)

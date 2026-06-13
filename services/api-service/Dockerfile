@@ -9,7 +9,7 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -p 1 -o /out/api-service ./cm
 
 FROM alpine:3.20
 
-RUN apk --no-cache add ca-certificates docker-cli
+RUN apk --no-cache add ca-certificates docker-cli git
 COPY --from=builder /out/api-service /usr/local/bin/api-service
 
 EXPOSE 8080
