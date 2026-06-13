@@ -6,6 +6,11 @@ import (
 	"strings"
 )
 
+type purgeStatement struct {
+	query string
+	args  []any
+}
+
 // сканера в рамках owner_user_id и console_product_id (новый прогон = снимок, без накопления).
 func (r *Repository) PurgeScannerScope(ctx context.Context, scannerName string, ownerUserID *int64, consoleProductID *int64) error {
 	scanner := strings.TrimSpace(scannerName)
@@ -19,8 +24,19 @@ func (r *Repository) PurgeScannerScope(ctx context.Context, scannerName string, 
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
+	for _, stmt := range purgeScannerScopeStatements(scanner, ownerUserID, consoleProductID) {
+		if _, err := tx.Exec(ctx, stmt.query, stmt.args...); err != nil {
+			return err
+		}
+	}
 
-	_, err = tx.Exec(ctx, `
+	return tx.Commit(ctx)
+}
+
+func purgeScannerScopeStatements(scanner string, ownerUserID *int64, consoleProductID *int64) []purgeStatement {
+	return []purgeStatement{
+		{
+			query: `
 		DELETE FROM core.group_vulnerabilities gv
 		USING core.vulnerability_groups g
 		WHERE gv.group_id = g.id
@@ -37,13 +53,11 @@ func (r *Repository) PurgeScannerScope(ctx context.Context, scannerName string, 
 			$2::bigint IS NULL
 			OR g.group_key LIKE ('u:' || $2::bigint::text || ':%')
 		  )
-	`, scanner, ownerUserID, consoleProductID)
-	if err != nil {
-		return err
-	}
-
-
-	_, err = tx.Exec(ctx, `
+	`,
+			args: []any{scanner, ownerUserID, consoleProductID},
+		},
+		{
+			query: `
 		DELETE FROM core.finding_vulnerabilities fv
 		USING core.findings f, core.processing_runs pr
 		WHERE fv.finding_id = f.id
@@ -51,25 +65,22 @@ func (r *Repository) PurgeScannerScope(ctx context.Context, scannerName string, 
 		  AND lower(btrim(pr.source_name)) = lower(btrim($1))
 		  AND ($2::bigint IS NULL OR pr.owner_user_id IS NOT DISTINCT FROM $2::bigint)
 		  AND ($3::bigint IS NULL OR pr.console_product_id IS NOT DISTINCT FROM $3::bigint)
-	`, scanner, ownerUserID, consoleProductID)
-	if err != nil {
-		return err
-	}
-
-	_, err = tx.Exec(ctx, `
+	`,
+			args: []any{scanner, ownerUserID, consoleProductID},
+		},
+		{
+			query: `
 		DELETE FROM core.findings f
 		USING core.processing_runs pr
 		WHERE f.processing_run_id = pr.id
 		  AND lower(btrim(pr.source_name)) = lower(btrim($1))
 		  AND ($2::bigint IS NULL OR pr.owner_user_id IS NOT DISTINCT FROM $2::bigint)
 		  AND ($3::bigint IS NULL OR pr.console_product_id IS NOT DISTINCT FROM $3::bigint)
-	`, scanner, ownerUserID, consoleProductID)
-	if err != nil {
-		return err
-	}
-
-
-	_, err = tx.Exec(ctx, `
+	`,
+			args: []any{scanner, ownerUserID, consoleProductID},
+		},
+		{
+			query: `
 		DELETE FROM core.vulnerabilities v
 		WHERE NOT EXISTS (
 			SELECT 1
@@ -77,16 +88,14 @@ func (r *Repository) PurgeScannerScope(ctx context.Context, scannerName string, 
 			INNER JOIN core.findings f ON f.id = fv.finding_id
 			INNER JOIN core.processing_runs pr ON pr.id = f.processing_run_id
 			WHERE fv.vulnerability_id = v.id
-			  AND ($2::bigint IS NULL OR pr.owner_user_id IS NOT DISTINCT FROM $2::bigint)
-			  AND ($3::bigint IS NULL OR pr.console_product_id IS NOT DISTINCT FROM $3::bigint)
+			  AND ($1::bigint IS NULL OR pr.owner_user_id IS NOT DISTINCT FROM $1::bigint)
+			  AND ($2::bigint IS NULL OR pr.console_product_id IS NOT DISTINCT FROM $2::bigint)
 		)
-	`, ownerUserID, consoleProductID)
-	if err != nil {
-		return err
-	}
-
-
-	_, err = tx.Exec(ctx, `
+	`,
+			args: []any{ownerUserID, consoleProductID},
+		},
+		{
+			query: `
 		DELETE FROM integration.ticket_links tl
 		USING core.vulnerability_groups g
 		WHERE tl.group_id = g.id
@@ -94,38 +103,33 @@ func (r *Repository) PurgeScannerScope(ctx context.Context, scannerName string, 
 			SELECT 1 FROM core.group_vulnerabilities gv WHERE gv.group_id = g.id
 		  )
 		  AND (
-			$2::bigint IS NULL
-			OR g.group_key LIKE ('u:' || $2::bigint::text || ':%')
+			$1::bigint IS NULL
+			OR g.group_key LIKE ('u:' || $1::bigint::text || ':%')
 		  )
-	`, ownerUserID)
-	if err != nil {
-		return err
-	}
-
-	_, err = tx.Exec(ctx, `
+	`,
+			args: []any{ownerUserID},
+		},
+		{
+			query: `
 		DELETE FROM core.vulnerability_groups g
 		WHERE NOT EXISTS (
 			SELECT 1 FROM core.group_vulnerabilities gv WHERE gv.group_id = g.id
 		)
 		  AND (
-			$2::bigint IS NULL
-			OR g.group_key LIKE ('u:' || $2::bigint::text || ':%')
+			$1::bigint IS NULL
+			OR g.group_key LIKE ('u:' || $1::bigint::text || ':%')
 		  )
-	`, ownerUserID)
-	if err != nil {
-		return err
-	}
-
-
-	_, err = tx.Exec(ctx, `
+	`,
+			args: []any{ownerUserID},
+		},
+		{
+			query: `
 		DELETE FROM core.processing_runs pr
 		WHERE lower(btrim(pr.source_name)) = lower(btrim($1))
 		  AND ($2::bigint IS NULL OR pr.owner_user_id IS NOT DISTINCT FROM $2::bigint)
 		  AND ($3::bigint IS NULL OR pr.console_product_id IS NOT DISTINCT FROM $3::bigint)
-	`, scanner, ownerUserID, consoleProductID)
-	if err != nil {
-		return err
+	`,
+			args: []any{scanner, ownerUserID, consoleProductID},
+		},
 	}
-
-	return tx.Commit(ctx)
 }
