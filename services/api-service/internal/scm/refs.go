@@ -3,6 +3,8 @@ package scm
 import (
 	"context"
 	"fmt"
+	"net"
+	"net/netip"
 	"net/url"
 	"os"
 	"os/exec"
@@ -11,7 +13,13 @@ import (
 	"time"
 )
 
+type lookupNetIPFunc func(context.Context, string, string) ([]netip.Addr, error)
+
 func ValidateGitRemoteURL(raw string) error {
+	return validateGitRemoteURL(raw, net.DefaultResolver.LookupNetIP)
+}
+
+func validateGitRemoteURL(raw string, lookup lookupNetIPFunc) error {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
 		return fmt.Errorf("empty git url")
@@ -20,6 +28,13 @@ func ValidateGitRemoteURL(raw string) error {
 		return fmt.Errorf("file:// remotes not allowed")
 	}
 	if strings.HasPrefix(strings.ToLower(raw), "git@") {
+		host, ok := parseSCPStyleGitHost(raw)
+		if !ok {
+			return fmt.Errorf("invalid git ssh url")
+		}
+		if err := validateRemoteHost(host, lookup); err != nil {
+			return err
+		}
 		if strings.Contains(raw, "..") {
 			return fmt.Errorf("invalid characters in git ssh url")
 		}
@@ -36,11 +51,61 @@ func ValidateGitRemoteURL(raw string) error {
 	default:
 		return fmt.Errorf("unsupported scheme %q (use http(s) or git@host:…)", u.Scheme)
 	}
-	if lowerHost == "localhost" || lowerHost == "127.0.0.1" || lowerHost == "::1" ||
-		strings.HasPrefix(lowerHost, "0.") || lowerHost == "metadata.google.internal" {
-		return fmt.Errorf("disallowed host %q", lowerHost)
+	if err := validateRemoteHost(lowerHost, lookup); err != nil {
+		return err
 	}
 	return nil
+}
+
+func parseSCPStyleGitHost(raw string) (string, bool) {
+	rest := raw[len("git@"):]
+	host, _, ok := strings.Cut(rest, ":")
+	if !ok || strings.TrimSpace(host) == "" {
+		return "", false
+	}
+	return host, true
+}
+
+func validateRemoteHost(host string, lookup lookupNetIPFunc) error {
+	lowerHost := strings.ToLower(strings.TrimSpace(host))
+	if lowerHost == "" {
+		return fmt.Errorf("empty git host")
+	}
+	if lowerHost == "localhost" || lowerHost == "metadata.google.internal" {
+		return fmt.Errorf("disallowed host %q", lowerHost)
+	}
+
+	if addr, err := netip.ParseAddr(lowerHost); err == nil {
+		if isDisallowedRemoteIP(addr) {
+			return fmt.Errorf("disallowed host %q", lowerHost)
+		}
+		return nil
+	}
+
+	addrs, err := lookup(context.Background(), "ip", lowerHost)
+	if err != nil {
+		return fmt.Errorf("resolve git host %q: %w", lowerHost, err)
+	}
+	if len(addrs) == 0 {
+		return fmt.Errorf("resolve git host %q: no addresses", lowerHost)
+	}
+	for _, addr := range addrs {
+		if isDisallowedRemoteIP(addr) {
+			return fmt.Errorf("disallowed host %q", lowerHost)
+		}
+	}
+	return nil
+}
+
+func isDisallowedRemoteIP(addr netip.Addr) bool {
+	addr = addr.Unmap()
+	return addr.IsUnspecified() ||
+		addr.IsLoopback() ||
+		addr.IsPrivate() ||
+		addr.IsLinkLocalUnicast() ||
+		addr.IsLinkLocalMulticast() ||
+		addr.IsInterfaceLocalMulticast() ||
+		addr.IsMulticast()
 }
 
 func ListRemoteBranches(ctx context.Context, repoURL string) ([]string, error) {
@@ -56,7 +121,12 @@ func ListRemoteBranches(ctx context.Context, repoURL string) ([]string, error) {
 	}
 
 	cmd := exec.CommandContext(ctx, "git", "ls-remote", "--heads", repoURL)
-	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
+	cmd.Env = append(os.Environ(),
+		"GIT_TERMINAL_PROMPT=0",
+		"GIT_CONFIG_COUNT=1",
+		"GIT_CONFIG_KEY_0=http.followRedirects",
+		"GIT_CONFIG_VALUE_0=false",
+	)
 	out, err := cmd.Output()
 	if err != nil {
 		if ctx.Err() != nil {
