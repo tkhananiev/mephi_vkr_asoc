@@ -36,6 +36,11 @@ func parseConsoleProductQueryParam(r *http.Request) (*int64, error) {
 }
 
 func (h *Handler) ensureConsoleProductReportAccess(w http.ResponseWriter, r *http.Request) bool {
+	uid, ok := ConsoleUserFromRequest(r)
+	if !ok {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "console user JWT required"})
+		return false
+	}
 	cp, err := parseConsoleProductQueryParam(r)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
@@ -43,11 +48,6 @@ func (h *Handler) ensureConsoleProductReportAccess(w http.ResponseWriter, r *htt
 	}
 	if cp == nil {
 		return true
-	}
-	uid, ok := ConsoleUserFromRequest(r)
-	if !ok {
-		writeJSON(w, http.StatusForbidden, map[string]string{"error": "console_product_id requires console user JWT"})
-		return false
 	}
 	if h.productStore == nil {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "products store unavailable (set APP_POSTGRES_DSN)"})
