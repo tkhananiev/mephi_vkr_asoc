@@ -742,6 +742,10 @@ func (h *Handler) promoteConsoleToAdmin(w http.ResponseWriter, r *http.Request) 
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": "user not found"})
 			return
 		}
+		if errors.Is(err, repo.ErrConsoleUserHasProducts) {
+			writeJSON(w, http.StatusConflict, map[string]string{"error": "cannot promote user with console products"})
+			return
+		}
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}

@@ -52,10 +52,14 @@ func authenticateAttachConsoleUser(r *http.Request, wantAPIKey, jwtSecret []byte
 	}
 	if strings.Count(token, ".") == 2 && len(jwtSecret) >= 32 {
 		if c, err := auth.ParseJWT(jwtSecret, token); err == nil && c != nil && c.UserID > 0 {
-			if strings.EqualFold(strings.TrimSpace(c.Role), "user") {
+			switch strings.ToLower(strings.TrimSpace(c.Role)) {
+			case "user":
 				return r.WithContext(WithConsoleUser(r.Context(), c.UserID)), true
+			case "admin":
+				return r.WithContext(WithAdminUser(r.Context(), c.UserID)), true
+			default:
+				return nil, false
 			}
-			return r, true
 		}
 	}
 	if len(wantAPIKey) > 0 {

@@ -12,6 +12,7 @@ import (
 )
 
 var ErrNotFound = errors.New("not found")
+var ErrConsoleUserHasProducts = errors.New("console user owns products")
 
 type ConsoleUser struct {
 	ID           int64
@@ -61,14 +62,14 @@ type Admin struct {
 }
 
 type PendingRegistration struct {
-	Email          string
-	Username       string
-	FirstName      string
-	LastName       string
-	Patronymic     string
-	PasswordHash   string
+	Email            string
+	Username         string
+	FirstName        string
+	LastName         string
+	Patronymic       string
+	PasswordHash     string
 	VerificationCode string
-	ExpiresAt      time.Time
+	ExpiresAt        time.Time
 }
 
 type Repo struct {
@@ -373,9 +374,17 @@ func (r *Repo) PromoteConsoleUserToAdmin(ctx context.Context, consoleUserID int6
 	}
 	defer tx.Rollback(ctx)
 	var hash string
-	err = tx.QueryRow(ctx, `SELECT password_hash FROM authn.console_users WHERE id = $1`, consoleUserID).Scan(&hash)
+	err = tx.QueryRow(ctx, `SELECT password_hash FROM authn.console_users WHERE id = $1 FOR UPDATE`, consoleUserID).Scan(&hash)
 	if err != nil {
 		return 0, err
+	}
+	var productsCount int64
+	err = tx.QueryRow(ctx, `SELECT COUNT(*) FROM core.console_products WHERE owner_user_id = $1`, consoleUserID).Scan(&productsCount)
+	if err != nil {
+		return 0, err
+	}
+	if productsCount > 0 {
+		return 0, ErrConsoleUserHasProducts
 	}
 	login = strings.TrimSpace(login)
 	err = tx.QueryRow(ctx,
