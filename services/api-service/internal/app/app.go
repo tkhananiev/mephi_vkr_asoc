@@ -119,6 +119,7 @@ func New(cfg config.Config) (*App, error) {
 		jwtBytes,
 		podOps,
 		intStore,
+		cfg.ReferenceServiceURL,
 		cfg.ProcessingServiceURL,
 		productStore,
 	)

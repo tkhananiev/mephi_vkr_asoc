@@ -23,6 +23,27 @@ func (h *Handler) handleReportVulnerabilitiesProxy(w http.ResponseWriter, r *htt
 	h.proxyGETToProcessing(w, r, "/api/v1/report/vulnerabilities")
 }
 
+func (h *Handler) handleReferenceSyncProxy(w http.ResponseWriter, r *http.Request) {
+	if h.referenceURL == "" {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "reference-data-service URL is not configured"})
+		return
+	}
+	target := h.referenceURL + r.URL.RequestURI()
+	req, err := http.NewRequestWithContext(r.Context(), r.Method, target, r.Body)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	copyProxyRequestHeaders(req.Header, r.Header)
+	resp, err := h.longHTTPUpstream.Do(req)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+		return
+	}
+	defer resp.Body.Close()
+	copyUpstreamResponse(w, resp)
+}
+
 func parseConsoleProductQueryParam(r *http.Request) (*int64, error) {
 	q := strings.TrimSpace(r.URL.Query().Get("console_product_id"))
 	if q == "" {
@@ -102,4 +123,35 @@ func (h *Handler) proxyGETToProcessing(w http.ResponseWriter, r *http.Request, p
 
 func defaultHTTPUpstream() *http.Client {
 	return &http.Client{Timeout: 2 * time.Minute}
+}
+
+func defaultLongHTTPUpstream() *http.Client {
+	return &http.Client{}
+}
+
+func copyProxyRequestHeaders(dst, src http.Header) {
+	for k, vals := range src {
+		if isSkippedProxyHeader(k) {
+			continue
+		}
+		for _, v := range vals {
+			dst.Add(k, v)
+		}
+	}
+}
+
+func isSkippedProxyHeader(name string) bool {
+	return isHopByHopHeader(name) ||
+		strings.EqualFold(name, "Authorization") ||
+		strings.EqualFold(name, "X-API-Key")
+}
+
+func isHopByHopHeader(name string) bool {
+	switch strings.ToLower(name) {
+	case "connection", "keep-alive", "proxy-authenticate", "proxy-authorization",
+		"te", "trailer", "transfer-encoding", "upgrade":
+		return true
+	default:
+		return false
+	}
 }

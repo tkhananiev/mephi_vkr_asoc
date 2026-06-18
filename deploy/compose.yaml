@@ -7,7 +7,7 @@ services:
       POSTGRES_USER: asoc
       POSTGRES_PASSWORD: asoc
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ../migrations:/docker-entrypoint-initdb.d
@@ -28,7 +28,7 @@ services:
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
     ports:
-      - "9092:9092"
+      - "127.0.0.1:9092:9092"
 
   reference-data-service:
     build:
@@ -56,7 +56,7 @@ services:
       - postgres
       - kafka
     ports:
-      - "8081:8081"
+      - "127.0.0.1:8081:8081"
 
   processing-service:
     image: golang:1.23
@@ -73,7 +73,7 @@ services:
       - postgres
       - kafka
     ports:
-      - "8082:8082"
+      - "127.0.0.1:8082:8082"
 
   semgrep-service:
     build:
@@ -89,7 +89,7 @@ services:
       - ../../demo:/app/demo:ro
       - semgrep_git_workspace:/var/asoc-semgrep-git
     ports:
-      - "8085:8085"
+      - "127.0.0.1:8085:8085"
 
   gitleaks-service:
     build:
@@ -104,7 +104,7 @@ services:
       - ../../demo:/app/demo:ro
       - gitleaks_git_workspace:/var/asoc-gitleaks-git
     ports:
-      - "8086:8086"
+      - "127.0.0.1:8086:8086"
 
   trivy-sca-service:
     build:
@@ -119,7 +119,7 @@ services:
       - ../../demo:/app/demo:ro
       - trivy_git_workspace:/var/asoc-trivy-git
     ports:
-      - "8088:8088"
+      - "127.0.0.1:8088:8088"
 
   zap-dast-service:
     build:
@@ -131,7 +131,7 @@ services:
       APP_ZAP_HOME: /zap
       APP_ZAP_SCAN_TIMEOUT_MIN: "8"
     ports:
-      - "8089:8089"
+      - "127.0.0.1:8089:8089"
 
   findings-adapter-service:
     build:
@@ -141,7 +141,7 @@ services:
     environment:
       APP_HTTP_PORT: "8090"
     ports:
-      - "8090:8090"
+      - "127.0.0.1:8094:8090"
 
   api-service:
     build:
@@ -150,6 +150,7 @@ services:
     container_name: mephi-vkr-api-service
     environment:
       APP_HTTP_PORT: "8080"
+      APP_REFERENCE_SERVICE_URL: http://reference-data-service:8081
       APP_PROCESSING_SERVICE_URL: http://processing-service:8082
       APP_JIRA_SERVICE_URL: http://jira-integration-service:8083
       APP_SEMGREP_SERVICE_URL: http://semgrep-service:8085
@@ -182,7 +183,7 @@ services:
       - trivy-sca-service
       - zap-dast-service
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
 
   auth-service:
     build:
@@ -200,7 +201,7 @@ services:
     depends_on:
       - postgres
     ports:
-      - "8091:8091"
+      - "127.0.0.1:8091:8091"
 
   jira-integration-service:
     image: golang:1.23
@@ -218,7 +219,7 @@ services:
       - postgres
       - jira-mock
     ports:
-      - "8083:8083"
+      - "127.0.0.1:8083:8083"
 
   jira-mock:
     image: golang:1.23
@@ -231,7 +232,7 @@ services:
     volumes:
       - ..:/app
     ports:
-      - "8090:8090"
+      - "127.0.0.1:8090:8090"
 
 volumes:
   postgres_data:
