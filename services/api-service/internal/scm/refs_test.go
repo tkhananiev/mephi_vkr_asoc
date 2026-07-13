@@ -1,6 +1,11 @@
 package scm
 
-import "testing"
+import (
+	"context"
+	"fmt"
+	"net"
+	"testing"
+)
 
 func TestParseLsRemoteHeads(t *testing.T) {
 	raw := "abc123\trefs/heads/main\n" +
@@ -21,10 +26,57 @@ func TestParseLsRemoteHeads(t *testing.T) {
 }
 
 func TestValidateGitRemoteURL(t *testing.T) {
-	if err := ValidateGitRemoteURL("https://gitlab.com/org/repo.git"); err != nil {
-		t.Fatalf("public gitlab url: %v", err)
+	stubLookup(t, map[string][]string{
+		"git.example.test":      {"93.184.216.34"},
+		"internal.example.test": {"10.0.0.12"},
+	})
+
+	allowed := []string{
+		"https://git.example.test/org/repo.git",
+		"https://93.184.216.34/org/repo.git",
+		"git@git.example.test:org/repo.git",
+		"Git@git.example.test:org/repo.git",
 	}
-	if err := ValidateGitRemoteURL("http://127.0.0.1/repo.git"); err == nil {
-		t.Fatal("expected localhost rejection")
+	for _, raw := range allowed {
+		if err := ValidateGitRemoteURL(raw); err != nil {
+			t.Fatalf("expected %q to be allowed: %v", raw, err)
+		}
 	}
+
+	rejected := []string{
+		"http://127.0.0.1/repo.git",
+		"http://169.254.169.254/latest/meta-data/",
+		"https://[::1]/repo.git",
+		"https://metadata.google.internal/repo.git",
+		"https://service.localhost/repo.git",
+		"https://internal.example.test/org/repo.git",
+		"http://127.1/repo.git",
+		"http://2130706433/repo.git",
+		"http://0177.0.0.1/repo.git",
+		"git@10.0.0.12:org/repo.git",
+		"git@[::1]:org/repo.git",
+		"file:///tmp/repo",
+	}
+	for _, raw := range rejected {
+		if err := ValidateGitRemoteURL(raw); err == nil {
+			t.Fatalf("expected %q to be rejected", raw)
+		}
+	}
+}
+
+func stubLookup(t *testing.T, hosts map[string][]string) {
+	t.Helper()
+	old := lookupIPAddr
+	lookupIPAddr = func(_ context.Context, host string) ([]net.IPAddr, error) {
+		rawIPs, ok := hosts[host]
+		if !ok {
+			return nil, fmt.Errorf("unexpected lookup for %s", host)
+		}
+		addrs := make([]net.IPAddr, 0, len(rawIPs))
+		for _, raw := range rawIPs {
+			addrs = append(addrs, net.IPAddr{IP: net.ParseIP(raw)})
+		}
+		return addrs, nil
+	}
+	t.Cleanup(func() { lookupIPAddr = old })
 }
