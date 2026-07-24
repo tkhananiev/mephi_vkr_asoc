@@ -639,8 +639,8 @@ func (r *Repository) GetGroupJiraContext(ctx context.Context, groupID int64, own
 			JOIN core.findings f ON f.id = fv.finding_id
 			LEFT JOIN core.processing_runs pr ON pr.id = f.processing_run_id
 			WHERE fv.vulnerability_id = v.id
-			  AND ($2::bigint IS NULL OR pr.owner_user_id IS NULL OR pr.owner_user_id = $2)
-			  AND ($3::bigint IS NULL OR pr.console_product_id IS NULL OR pr.console_product_id = $3)
+			  AND ($2::bigint IS NULL OR pr.owner_user_id IS NOT DISTINCT FROM $2)
+			  AND ($3::bigint IS NULL OR pr.console_product_id IS NOT DISTINCT FROM $3)
 			ORDER BY f.id DESC
 			LIMIT 1
 		) fp ON true
@@ -652,7 +652,7 @@ func (r *Repository) GetGroupJiraContext(ctx context.Context, groupID int64, own
 				JOIN core.findings f_o ON f_o.id = fv_o.finding_id
 				LEFT JOIN core.processing_runs pr_o ON pr_o.id = f_o.processing_run_id
 				WHERE fv_o.vulnerability_id = v.id
-				  AND (pr_o.owner_user_id IS NULL OR pr_o.owner_user_id = $2)
+				  AND pr_o.owner_user_id IS NOT DISTINCT FROM $2
 			)
 		)
 		ORDER BY v.id

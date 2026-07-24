@@ -72,6 +72,12 @@ func (h *Handler) handleScan(w http.ResponseWriter, r *http.Request) {
 		if targetPath == "" {
 			targetPath = h.defaultScanTargetPath
 		}
+		confined, err := workspace.AssertPathUnderRoot(targetPath, h.defaultScanTargetPath)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		targetPath = confined
 	}
 	if targetPath == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "target_path required (or set APP_DEFAULT_SCAN_TARGET_PATH) unless git_repository_url is set"})

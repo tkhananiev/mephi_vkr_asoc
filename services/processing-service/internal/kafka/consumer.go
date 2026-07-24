@@ -10,6 +10,15 @@ import (
 	"mephi_vkr_asoc/services/processing-service/internal/service"
 )
 
+type partitionZeroBalancer struct{}
+
+func (partitionZeroBalancer) Balance(_ kafkago.Message, partitions ...int) int {
+	if len(partitions) == 0 {
+		return 0
+	}
+	return partitions[0]
+}
+
 type IngestConsumer struct {
 	brokers     []string
 	ingestTopic string
@@ -43,7 +52,8 @@ func (c *IngestConsumer) Run(ctx context.Context) error {
 		Topic:        c.resultTopic,
 		RequiredAcks: kafkago.RequireAll,
 		Async:        false,
-		Balancer:     &kafkago.LeastBytes{},
+		// Keep replies on partition 0; api-service PublishAndWait reads only that partition.
+		Balancer: partitionZeroBalancer{},
 	}
 	defer func() { _ = writer.Close() }()
 
