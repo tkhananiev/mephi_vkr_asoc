@@ -49,6 +49,14 @@ func (b *IngestBridge) Publish(ctx context.Context, payload models.ProcessingIng
 
 func (b *IngestBridge) PublishAndWait(ctx context.Context, payload models.ProcessingIngestRequest) (models.ProcessingResponse, error) {
 	corr := uuid.New().String()
+
+	// Capture the result-topic high watermark before publishing so a fast
+	// consumer cannot write a reply that a LastOffset reader would skip.
+	startOffset, err := b.resultEndOffset(ctx)
+	if err != nil {
+		return models.ProcessingResponse{}, err
+	}
+
 	if err := b.writeIngest(ctx, corr, payload); err != nil {
 		return models.ProcessingResponse{}, err
 	}
@@ -59,7 +67,7 @@ func (b *IngestBridge) PublishAndWait(ctx context.Context, payload models.Proces
 		Partition:   0,
 		MinBytes:    1,
 		MaxBytes:    10e6,
-		StartOffset: kafkago.LastOffset,
+		StartOffset: startOffset,
 	})
 	defer func() { _ = r.Close() }()
 
@@ -86,6 +94,22 @@ func (b *IngestBridge) PublishAndWait(ctx context.Context, payload models.Proces
 		}
 		return *out.Processing, nil
 	}
+}
+
+func (b *IngestBridge) resultEndOffset(ctx context.Context) (int64, error) {
+	if len(b.brokers) == 0 {
+		return 0, fmt.Errorf("no kafka brokers")
+	}
+	conn, err := kafkago.DialLeader(ctx, "tcp", b.brokers[0], b.resultTopic, 0)
+	if err != nil {
+		return 0, fmt.Errorf("kafka dial result topic: %w", err)
+	}
+	defer func() { _ = conn.Close() }()
+	offset, err := conn.ReadLastOffset()
+	if err != nil {
+		return 0, fmt.Errorf("kafka read result end offset: %w", err)
+	}
+	return offset, nil
 }
 
 func (b *IngestBridge) writeIngest(ctx context.Context, corr string, payload models.ProcessingIngestRequest) error {
