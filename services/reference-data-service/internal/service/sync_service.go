@@ -205,10 +205,12 @@ func (s *SyncService) syncNVDPaged(ctx context.Context, paged NVDFullSync, runID
 				}
 			}
 		}
-		now := time.Now().UTC()
+		// Advance only to the covered upper bound (`end`). Using time.Now()
+		// here skips CVEs modified while this incremental run was in flight
+		// (anything after `end` minus the next overlap window).
 		if err := s.repo.UpsertReferenceSyncCursor(ctx, models.ReferenceSyncCursor{
 			SourceCode:           nvdCursorSource,
-			NVDLastModEnd:        &now,
+			NVDLastModEnd:        &end,
 			NVDFullSyncCompleted: true,
 		}); err != nil {
 			return result, err

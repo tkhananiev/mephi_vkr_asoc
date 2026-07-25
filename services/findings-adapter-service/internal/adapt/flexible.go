@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"mephi_vkr_asoc/services/findings-adapter-service/internal/models"
 )
@@ -16,7 +17,7 @@ func Flexible(raw []byte, targetURL string) ([]models.FindingItem, error) {
 	switch raw[0] {
 	case '[':
 		var norm []models.FindingItem
-		if err := json.Unmarshal(raw, &norm); err == nil {
+		if err := json.Unmarshal(raw, &norm); err == nil && looksLikeNormalizedFindings(norm) {
 			return norm, nil
 		}
 		return Gitleaks(raw)
@@ -50,4 +51,26 @@ func Flexible(raw []byte, targetURL string) ([]models.FindingItem, error) {
 	default:
 		return nil, fmt.Errorf("response must be JSON array or object")
 	}
+}
+
+// looksLikeNormalizedFindings reports whether a decoded array is already in
+// ASOC FindingItem shape. Scanner-native arrays (e.g. Gitleaks) also decode
+// into []FindingItem without error because unknown JSON fields are ignored,
+// leaving blank identifiers — those must fall through to a dedicated parser.
+func looksLikeNormalizedFindings(items []models.FindingItem) bool {
+	if len(items) == 0 {
+		return true
+	}
+	for _, it := range items {
+		if strings.TrimSpace(it.AssetID) != "" ||
+			strings.TrimSpace(it.Identifier) != "" ||
+			strings.TrimSpace(it.Severity) != "" ||
+			strings.TrimSpace(it.Component) != "" ||
+			strings.TrimSpace(it.Version) != "" ||
+			strings.TrimSpace(it.CVE) != "" ||
+			strings.TrimSpace(it.CWE) != "" {
+			return true
+		}
+	}
+	return false
 }
