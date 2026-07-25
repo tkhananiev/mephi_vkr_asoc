@@ -41,12 +41,10 @@ func (s *ProcessingService) ProcessFindings(ctx context.Context, request models.
 		item := enrichFindingCatalogFields(raw)
 		refID, correlationStatus := s.resolveCatalogRef(ctx, item)
 
+		// Keep the finding's own CVE. A CWE catalog hit must not invent a CVE:
+		// one CWE maps to many unrelated CVEs, and copying any alias would
+		// corrupt vulnerability identity, grouping, and Jira context.
 		effectiveCVE := strings.TrimSpace(item.CVE)
-		if effectiveCVE == "" && refID != nil {
-			if fromCat, _ := s.repo.FindCVEAliasByReferenceRecordID(ctx, *refID); fromCat != "" {
-				effectiveCVE = fromCat
-			}
-		}
 
 		payload, _ := json.Marshal(map[string]any{
 			"metadata":    item.Metadata,
