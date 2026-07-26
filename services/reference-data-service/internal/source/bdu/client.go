@@ -36,7 +36,9 @@ type rssItem struct {
 	PubDate     string `xml:"pubDate"`
 }
 
-var bduIDPattern = regexp.MustCompile(`BDU:\d+`)
+// FSTEC identifiers are BDU:YYYY-NNNNN (year + sequence). BDU:\d+ incorrectly
+// truncated to BDU:YYYY and collapsed every vulnerability from the same year.
+var bduIDPattern = regexp.MustCompile(`(?i)BDU:\d{4}-\d+`)
 var cvePattern = regexp.MustCompile(`CVE-\d{4}-\d+`)
 
 const bduFeedUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
@@ -92,12 +94,18 @@ func bduTLSConfig(skipTLSVerify bool, rootCAPEMPath string) (*tls.Config, error)
 }
 
 func (c *Client) Fetch(ctx context.Context) ([]models.SourceRecord, error) {
-	for _, u := range bduFeedURLsToTry(c.feedURL) {
+	tried := bduFeedURLsToTry(c.feedURL)
+	for _, u := range tried {
 		if rec, ok := c.fetchRSSFromURL(ctx, u); ok {
 			return rec, nil
 		}
 	}
-	return c.demoFallbackRecord(), nil
+	// Do not upsert demo/fake rows as real bdu_fstec catalog data. A successful
+	// fallback previously overwrote BDU:2021-00001 (and aliases) whenever RSS failed.
+	if len(tried) == 0 {
+		return nil, fmt.Errorf("bdu rss: feed URL is not configured")
+	}
+	return nil, fmt.Errorf("bdu rss: feed unavailable or unreadable (tried %d URL(s))", len(tried))
 }
 
 func bduFeedURLsToTry(primary string) []string {
@@ -189,38 +197,10 @@ func (c *Client) fetchRSSFromURL(ctx context.Context, feedURL string) ([]models.
 	return records, true
 }
 
-func (c *Client) demoFallbackRecord() []models.SourceRecord {
-	now := time.Now().UTC()
-	metadata := map[string]any{
-		"source": "demo_fallback",
-		"reason": "bdu feed unavailable or blocked in current environment",
-	}
-
-	return []models.SourceRecord{
-		{
-			ExternalID:  "BDU:2021-00001",
-			Title:       "Демонстрационная запись БДУ ФСТЭК",
-			Description: "Fallback-запись для демонстрационного сценария корреляции с CVE-2021-44228.",
-			Severity:    "high",
-			PublishedAt: &now,
-			ModifiedAt:  &now,
-			SourceURL:   c.feedURL,
-			Status:      "published",
-			Metadata:    mustJSON(metadata),
-			Aliases: []models.ReferenceAlias{
-				{AliasType: "CVE", AliasValue: "CVE-2021-44228"},
-				{AliasType: "BDU", AliasValue: "BDU:2021-00001"},
-			},
-			RawPayload:  `{"fallback":true}`,
-			ContentType: "application/json",
-		},
-	}
-}
-
 func extractBDUID(item rssItem) string {
 	joined := strings.TrimSpace(item.GUID + " " + item.Link + " " + item.Title)
 	if match := bduIDPattern.FindString(joined); match != "" {
-		return match
+		return strings.ToUpper(match)
 	}
 	if item.GUID != "" {
 		return item.GUID
