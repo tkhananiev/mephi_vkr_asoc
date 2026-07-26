@@ -244,6 +244,10 @@ func (h *Handler) publicRegister(w http.ResponseWriter, r *http.Request) {
 		Patronymic: strings.TrimSpace(body.Patronymic), PasswordHash: string(hash), VerificationCode: code,
 		ExpiresAt: time.Now().Add(15 * time.Minute),
 	}); err != nil {
+		if errors.Is(err, repo.ErrPendingRegistrationActive) {
+			writeJSON(w, http.StatusConflict, map[string]string{"error": "registration already in progress for this email"})
+			return
+		}
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}

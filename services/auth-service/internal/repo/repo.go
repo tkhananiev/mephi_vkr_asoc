@@ -13,6 +13,10 @@ import (
 
 var ErrNotFound = errors.New("not found")
 
+// ErrPendingRegistrationActive is returned when a non-expired pending registration
+// already exists for the email and must not be overwritten (prevents credential hijack).
+var ErrPendingRegistrationActive = errors.New("pending registration already active")
+
 type ConsoleUser struct {
 	ID           int64
 	Email        string
@@ -293,7 +297,10 @@ func (r *Repo) SetAdminPassword(ctx context.Context, id int64, hash string) erro
 }
 
 func (r *Repo) UpsertPendingRegistration(ctx context.Context, p PendingRegistration) error {
-	_, err := r.pool.Exec(ctx, `
+	// Refuse to replace an unexpired pending row. Blind ON CONFLICT UPDATE let an
+	// attacker overwrite password_hash + verification_code for a victim email; the
+	// victim's verify step would then create the account with the attacker's password.
+	cmd, err := r.pool.Exec(ctx, `
 		INSERT INTO authn.pending_registrations (
 			email, username, first_name, last_name, patronymic, password_hash, verification_code, expires_at
 		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
@@ -305,6 +312,7 @@ func (r *Repo) UpsertPendingRegistration(ctx context.Context, p PendingRegistrat
 		    password_hash = EXCLUDED.password_hash,
 		    verification_code = EXCLUDED.verification_code,
 		    expires_at = EXCLUDED.expires_at
+		WHERE authn.pending_registrations.expires_at <= NOW()
 	`,
 		normEmail(p.Email),
 		strings.TrimSpace(p.Username),
@@ -315,7 +323,13 @@ func (r *Repo) UpsertPendingRegistration(ctx context.Context, p PendingRegistrat
 		strings.TrimSpace(p.VerificationCode),
 		p.ExpiresAt,
 	)
-	return err
+	if err != nil {
+		return err
+	}
+	if cmd.RowsAffected() == 0 {
+		return ErrPendingRegistrationActive
+	}
+	return nil
 }
 
 func (r *Repo) GetPendingRegistration(ctx context.Context, email string) (*PendingRegistration, error) {
