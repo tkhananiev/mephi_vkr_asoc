@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"mephi_vkr_asoc/services/findings-adapter-service/internal/models"
 )
@@ -16,7 +17,7 @@ func Flexible(raw []byte, targetURL string) ([]models.FindingItem, error) {
 	switch raw[0] {
 	case '[':
 		var norm []models.FindingItem
-		if err := json.Unmarshal(raw, &norm); err == nil {
+		if err := json.Unmarshal(raw, &norm); err == nil && looksLikeNormalizedFindings(norm) {
 			return norm, nil
 		}
 		return Gitleaks(raw)
@@ -28,7 +29,7 @@ func Flexible(raw []byte, targetURL string) ([]models.FindingItem, error) {
 		if _, ok := probe["results"]; ok {
 			return Semgrep(raw)
 		}
-		if _, ok := probe["findings"]; ok {
+		if inner, ok := probe["findings"]; ok {
 			var wrap struct {
 				Findings []models.FindingItem `json:"findings"`
 			}
@@ -38,7 +39,12 @@ func Flexible(raw []byte, targetURL string) ([]models.FindingItem, error) {
 			if wrap.Findings == nil {
 				return []models.FindingItem{}, nil
 			}
-			return wrap.Findings, nil
+			if looksLikeNormalizedFindings(wrap.Findings) {
+				return wrap.Findings, nil
+			}
+			// Native scanner arrays (e.g. Gitleaks) under "findings" decode as blank
+			// FindingItems because unknown fields are ignored — fall through.
+			return Gitleaks(inner)
 		}
 		if _, ok := probe["Results"]; ok {
 			return Trivy(raw)
@@ -50,4 +56,25 @@ func Flexible(raw []byte, targetURL string) ([]models.FindingItem, error) {
 	default:
 		return nil, fmt.Errorf("response must be JSON array or object")
 	}
+}
+
+// looksLikeNormalizedFindings reports whether a decoded slice is already in
+// ASOC FindingItem shape. Scanner-native objects also decode into FindingItem
+// without error (unknown JSON fields ignored), leaving blank identifiers.
+func looksLikeNormalizedFindings(items []models.FindingItem) bool {
+	if len(items) == 0 {
+		return true
+	}
+	for _, it := range items {
+		if strings.TrimSpace(it.AssetID) != "" ||
+			strings.TrimSpace(it.Identifier) != "" ||
+			strings.TrimSpace(it.Severity) != "" ||
+			strings.TrimSpace(it.Component) != "" ||
+			strings.TrimSpace(it.Version) != "" ||
+			strings.TrimSpace(it.CVE) != "" ||
+			strings.TrimSpace(it.CWE) != "" {
+			return true
+		}
+	}
+	return false
 }
