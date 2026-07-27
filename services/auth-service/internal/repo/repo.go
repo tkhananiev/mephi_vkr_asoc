@@ -13,6 +13,9 @@ import (
 
 var ErrNotFound = errors.New("not found")
 
+// ErrLastEnabledAdmin is returned when delete/demote/disable would leave zero enabled admins.
+var ErrLastEnabledAdmin = errors.New("cannot remove the last enabled administrator")
+
 type ConsoleUser struct {
 	ID           int64
 	Email        string
@@ -217,6 +220,29 @@ func (r *Repo) AdminCount(ctx context.Context) (int64, error) {
 	return n, err
 }
 
+// CountEnabledAdmins counts administrators that can still log in (disabled = false).
+func (r *Repo) CountEnabledAdmins(ctx context.Context) (int64, error) {
+	var n int64
+	err := r.pool.QueryRow(ctx, `SELECT COUNT(*) FROM authn.admins WHERE disabled = FALSE`).Scan(&n)
+	return n, err
+}
+
+// lockAdminsForUpdate serializes last-enabled checks across delete/demote/disable.
+func lockAdminsForUpdate(ctx context.Context, tx pgx.Tx) error {
+	rows, err := tx.Query(ctx, `SELECT id FROM authn.admins FOR UPDATE`)
+	if err != nil {
+		return err
+	}
+	rows.Close()
+	return rows.Err()
+}
+
+func countEnabledAdminsTx(ctx context.Context, tx pgx.Tx) (int64, error) {
+	var n int64
+	err := tx.QueryRow(ctx, `SELECT COUNT(*) FROM authn.admins WHERE disabled = FALSE`).Scan(&n)
+	return n, err
+}
+
 func (r *Repo) InsertAdmin(ctx context.Context, login, hash string) (int64, error) {
 	login = strings.TrimSpace(login)
 	var id int64
@@ -281,10 +307,46 @@ func (r *Repo) UpdateAdmin(ctx context.Context, id int64, login *string, disable
 	if len(sets) == 0 {
 		return nil
 	}
+
+	disabling := disabled != nil && *disabled
+	if !disabling {
+		args = append(args, id)
+		q := fmt.Sprintf(`UPDATE authn.admins SET %s WHERE id = $%d`, strings.Join(sets, ", "), n)
+		_, err := r.pool.Exec(ctx, q, args...)
+		return err
+	}
+
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+	if err := lockAdminsForUpdate(ctx, tx); err != nil {
+		return err
+	}
+	var currentlyDisabled bool
+	err = tx.QueryRow(ctx, `SELECT disabled FROM authn.admins WHERE id = $1`, id).Scan(&currentlyDisabled)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrNotFound
+		}
+		return err
+	}
+	if !currentlyDisabled {
+		enabled, err := countEnabledAdminsTx(ctx, tx)
+		if err != nil {
+			return err
+		}
+		if enabled <= 1 {
+			return ErrLastEnabledAdmin
+		}
+	}
 	args = append(args, id)
 	q := fmt.Sprintf(`UPDATE authn.admins SET %s WHERE id = $%d`, strings.Join(sets, ", "), n)
-	_, err := r.pool.Exec(ctx, q, args...)
-	return err
+	if _, err := tx.Exec(ctx, q, args...); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
 func (r *Repo) SetAdminPassword(ctx context.Context, id int64, hash string) error {
@@ -356,14 +418,39 @@ func (r *Repo) DeleteConsoleUser(ctx context.Context, id int64) error {
 }
 
 func (r *Repo) DeleteAdmin(ctx context.Context, id int64) error {
-	cmd, err := r.pool.Exec(ctx, `DELETE FROM authn.admins WHERE id = $1`, id)
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+	if err := lockAdminsForUpdate(ctx, tx); err != nil {
+		return err
+	}
+	var disabled bool
+	err = tx.QueryRow(ctx, `SELECT disabled FROM authn.admins WHERE id = $1`, id).Scan(&disabled)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrNotFound
+		}
+		return err
+	}
+	if !disabled {
+		enabled, err := countEnabledAdminsTx(ctx, tx)
+		if err != nil {
+			return err
+		}
+		if enabled <= 1 {
+			return ErrLastEnabledAdmin
+		}
+	}
+	cmd, err := tx.Exec(ctx, `DELETE FROM authn.admins WHERE id = $1`, id)
 	if err != nil {
 		return err
 	}
 	if cmd.RowsAffected() == 0 {
 		return ErrNotFound
 	}
-	return nil
+	return tx.Commit(ctx)
 }
 
 func (r *Repo) PromoteConsoleUserToAdmin(ctx context.Context, consoleUserID int64, login string) (adminID int64, err error) {
@@ -403,10 +490,26 @@ func (r *Repo) DemoteAdminToConsoleUser(ctx context.Context, adminID int64, emai
 		return 0, err
 	}
 	defer tx.Rollback(ctx)
-	var hash string
-	err = tx.QueryRow(ctx, `SELECT password_hash FROM authn.admins WHERE id = $1`, adminID).Scan(&hash)
-	if err != nil {
+	if err := lockAdminsForUpdate(ctx, tx); err != nil {
 		return 0, err
+	}
+	var hash string
+	var disabled bool
+	err = tx.QueryRow(ctx, `SELECT password_hash, disabled FROM authn.admins WHERE id = $1`, adminID).Scan(&hash, &disabled)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return 0, ErrNotFound
+		}
+		return 0, err
+	}
+	if !disabled {
+		enabled, err := countEnabledAdminsTx(ctx, tx)
+		if err != nil {
+			return 0, err
+		}
+		if enabled <= 1 {
+			return 0, ErrLastEnabledAdmin
+		}
 	}
 	disp := FormatDisplayFromFIO(lastName, firstName, patronymic)
 	if disp == "" {

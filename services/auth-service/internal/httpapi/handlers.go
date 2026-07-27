@@ -566,6 +566,14 @@ func (h *Handler) patchAdmin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.r.UpdateAdmin(r.Context(), uid, body.Login, body.Disabled); err != nil {
+		if errors.Is(err, repo.ErrLastEnabledAdmin) {
+			writeJSON(w, http.StatusConflict, map[string]string{"error": "cannot disable the last enabled administrator"})
+			return
+		}
+		if errors.Is(err, repo.ErrNotFound) {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "admin not found"})
+			return
+		}
 		var pe *pgconn.PgError
 		if errors.As(err, &pe) && pe.Code == "23505" {
 			writeJSON(w, http.StatusConflict, map[string]string{"error": "login already exists"})
@@ -678,17 +686,11 @@ func (h *Handler) deleteAdmin(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid id"})
 		return
 	}
-	ctx := r.Context()
-	nAdm, err := h.r.AdminCount(ctx)
-	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-		return
-	}
-	if nAdm <= 1 {
-		writeJSON(w, http.StatusConflict, map[string]string{"error": "cannot delete the last administrator account"})
-		return
-	}
-	if err := h.r.DeleteAdmin(ctx, uid); err != nil {
+	if err := h.r.DeleteAdmin(r.Context(), uid); err != nil {
+		if errors.Is(err, repo.ErrLastEnabledAdmin) {
+			writeJSON(w, http.StatusConflict, map[string]string{"error": "cannot delete the last enabled administrator"})
+			return
+		}
 		if errors.Is(err, repo.ErrNotFound) {
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": "admin not found"})
 			return
@@ -760,15 +762,6 @@ func (h *Handler) demoteAdminToConsoleUser(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	ctx := r.Context()
-	nAdm, err := h.r.AdminCount(ctx)
-	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-		return
-	}
-	if nAdm <= 1 {
-		writeJSON(w, http.StatusConflict, map[string]string{"error": "cannot demote the last administrator"})
-		return
-	}
 	var body struct {
 		Email      string `json:"email"`
 		Username   string `json:"username"`
@@ -791,6 +784,10 @@ func (h *Handler) demoteAdminToConsoleUser(w http.ResponseWriter, r *http.Reques
 		strings.TrimSpace(body.FirstName), strings.TrimSpace(body.LastName), strings.TrimSpace(body.Patronymic),
 	)
 	if err != nil {
+		if errors.Is(err, repo.ErrLastEnabledAdmin) {
+			writeJSON(w, http.StatusConflict, map[string]string{"error": "cannot demote the last enabled administrator"})
+			return
+		}
 		var pe *pgconn.PgError
 		if errors.As(err, &pe) && pe.Code == "23505" {
 			writeJSON(w, http.StatusConflict, map[string]string{"error": "email or username already exists"})
