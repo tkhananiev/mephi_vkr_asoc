@@ -79,6 +79,13 @@ func (h *Handler) handleScan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if cfg := strings.TrimSpace(req.SemgrepConfig); cfg != "" {
+		if err := runner.ValidateSemgrepConfig(cfg); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+	}
+
 	payload, err := h.runner.Run(r.Context(), targetPath, req.SemgrepConfig)
 	if err != nil {
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})

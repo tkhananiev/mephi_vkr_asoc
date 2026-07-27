@@ -73,6 +73,11 @@ func randomSuffix() string {
 	return hex.EncodeToString(b)
 }
 
+// Prevent HTTP(S) remotes from redirecting to loopback/private/metadata after host checks.
+func gitHTTPSafeArgs() []string {
+	return []string{"-c", "http.followRedirects=false", "-c", "protocol.file.allow=never"}
+}
+
 func PrepareGitWorkspace(ctx context.Context, workRoot string, repoURL string, gitRef string, subDirInRepo string) (scanDir string, cleanup func(), err error) {
 	if err := ValidateGitRemoteURL(repoURL); err != nil {
 		return "", nil, err
@@ -94,13 +99,13 @@ func PrepareGitWorkspace(ctx context.Context, workRoot string, repoURL string, g
 	}
 	args = append(args, repoURL, dest)
 
-	cmd := exec.CommandContext(ctx, "git", args...)
+	cmd := exec.CommandContext(ctx, "git", append(gitHTTPSafeArgs(), args...)...)
 	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
 	out, cerr := cmd.CombinedOutput()
 
 	if cerr != nil && ref != "" {
 		_ = os.RemoveAll(dest)
-		cmd2 := exec.CommandContext(ctx, "git", "clone", "--depth", "1", "--single-branch", repoURL, dest)
+		cmd2 := exec.CommandContext(ctx, "git", append(gitHTTPSafeArgs(), "clone", "--depth", "1", "--single-branch", repoURL, dest)...)
 		cmd2.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
 		out2, err2 := cmd2.CombinedOutput()
 		if err2 != nil {
