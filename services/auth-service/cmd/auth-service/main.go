@@ -42,9 +42,9 @@ func main() {
 
 	r := repo.New(pool)
 
-	n, err := r.AdminCount(ctx)
+	n, err := r.CountEnabledAdmins(ctx)
 	if err != nil {
-		log.Fatalf("auth-service: admin count: %v", err)
+		log.Fatalf("auth-service: enabled admin count: %v", err)
 	}
 	if n == 0 {
 		lg := strings.TrimSpace(cfg.BootstrapLogin)
@@ -59,7 +59,7 @@ func main() {
 			}
 			log.Printf("auth-service: created bootstrap admin login=%q (change password after first deploy)", lg)
 		} else {
-			log.Printf("auth-service: no admins in DB; set AUTH_BOOTSTRAP_ADMIN_LOGIN and AUTH_BOOTSTRAP_ADMIN_PASSWORD (≥8 chars) to create the first admin")
+			log.Printf("auth-service: no enabled admins in DB; set AUTH_BOOTSTRAP_ADMIN_LOGIN and AUTH_BOOTSTRAP_ADMIN_PASSWORD (≥8 chars) to create the first admin")
 		}
 	}
 

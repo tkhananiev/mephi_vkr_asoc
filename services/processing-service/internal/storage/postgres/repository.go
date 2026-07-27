@@ -293,25 +293,10 @@ func (r *Repository) ListGroups(ctx context.Context, limit int, ownerUserID *int
 
 func (r *Repository) UpdateGroupStatus(ctx context.Context, groupID int64, status string, ownerUserID *int64) (models.VulnerabilityGroup, error) {
 	var item models.VulnerabilityGroup
-	err := r.pool.QueryRow(ctx, `
-		UPDATE core.vulnerability_groups g
-		SET status = $2, updated_at = NOW()
-		WHERE g.id = $1
-		  AND (
-			$3::bigint IS NULL
-			OR EXISTS (
-				SELECT 1
-				FROM core.group_vulnerabilities gv
-				JOIN core.vulnerabilities v ON v.id = gv.vulnerability_id
-				JOIN core.finding_vulnerabilities fv ON fv.vulnerability_id = v.id
-				JOIN core.findings f ON f.id = fv.finding_id
-				JOIN core.processing_runs pr ON pr.id = f.processing_run_id
-				WHERE gv.group_id = g.id
-				  AND pr.owner_user_id = $3
-			)
-		  )
-		RETURNING g.id, g.group_key, g.grouping_rule, g.severity_max, g.assets_count, g.status
-	`, groupID, status, ownerUserID).Scan(
+	// Scope by group_key prefix (u:<owner>:...), not by shared vulnerability links.
+	// Vulnerabilities are global by signature; an EXISTS over finding→vuln→group
+	// would let user A mutate user B's (or global) group that shares the same CVE row.
+	err := r.pool.QueryRow(ctx, updateGroupStatusSQL, groupID, status, ownerUserID).Scan(
 		&item.ID, &item.GroupKey, &item.GroupingRule, &item.SeverityMax, &item.AssetsCount, &item.Status,
 	)
 	if err != nil {
@@ -425,6 +410,10 @@ func (r *Repository) ListVulnerabilityReport(ctx context.Context, limit int, own
 		LEFT JOIN catalog.reference_records rr ON rr.id = v.reference_record_id
 		LEFT JOIN scanner_pick sp ON sp.vulnerability_id = v.id
 		WHERE (
+			$2::bigint IS NULL
+			OR g.group_key LIKE ('u:' || $2::bigint::text || ':%')
+		)
+		AND (
 			$2::bigint IS NULL
 			OR EXISTS (
 				SELECT 1
