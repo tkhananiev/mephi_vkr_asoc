@@ -68,7 +68,7 @@ func (h *Handler) handleScan(w http.ResponseWriter, r *http.Request) {
 		cleanup = clr
 		defer cleanup()
 		targetPath = sd
-		log.Printf("semgrep-service: cloned %s → scan dir %s", gitURL, sd)
+		log.Printf("semgrep-service: cloned %s → scan dir %s", workspace.SanitizeGitURLForDisplay(gitURL), sd)
 	} else {
 		if targetPath == "" {
 			targetPath = h.defaultScanTargetPath

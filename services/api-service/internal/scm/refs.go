@@ -43,6 +43,20 @@ func ValidateGitRemoteURL(raw string) error {
 	return nil
 }
 
+// SanitizeGitURLForDisplay strips userinfo (tokens/passwords) from http(s) remotes.
+func SanitizeGitURLForDisplay(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return raw
+	}
+	u, err := url.Parse(raw)
+	if err != nil || u.User == nil {
+		return raw
+	}
+	u.User = nil
+	return u.String()
+}
+
 func ListRemoteBranches(ctx context.Context, repoURL string) ([]string, error) {
 	repoURL = strings.TrimSpace(repoURL)
 	if err := ValidateGitRemoteURL(repoURL); err != nil {
