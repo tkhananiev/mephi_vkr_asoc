@@ -15,6 +15,7 @@ import (
 
 	apikafka "mephi_vkr_asoc/services/api-service/internal/kafka"
 	"mephi_vkr_asoc/services/api-service/internal/models"
+	"mephi_vkr_asoc/services/api-service/internal/scm"
 )
 
 const processingConsoleUserHeader = "X-ASOC-Console-User-ID"
@@ -369,18 +370,19 @@ type semgrepScanRequest struct {
 
 func DescribeScanTarget(r models.ScanRequest) string {
 	if u := strings.TrimSpace(r.TargetURL); u != "" {
-		return u
+		return scm.SanitizeGitURLForDisplay(u)
 	}
 	if strings.TrimSpace(r.GitRepositoryURL) != "" {
 		ref := strings.TrimSpace(r.GitRepositoryRef)
 		if ref == "" {
 			ref = "(default-branch)"
 		}
+		repo := scm.SanitizeGitURLForDisplay(r.GitRepositoryURL)
 		sub := strings.TrimSpace(r.TargetPath)
 		if sub != "" {
-			return fmt.Sprintf("%s@%s/%s", strings.TrimSpace(r.GitRepositoryURL), ref, sub)
+			return fmt.Sprintf("%s@%s/%s", repo, ref, sub)
 		}
-		return fmt.Sprintf("%s@%s", strings.TrimSpace(r.GitRepositoryURL), ref)
+		return fmt.Sprintf("%s@%s", repo, ref)
 	}
 	return r.TargetPath
 }

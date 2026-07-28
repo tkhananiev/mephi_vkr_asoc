@@ -20,18 +20,26 @@ type zapSite struct {
 }
 
 type zapAlert struct {
-	PluginID   string `json:"pluginid"`
-	AlertRef   string `json:"alertRef"`
-	Alert      string `json:"alert"`
-	Name       string `json:"name"`
-	RiskCode   string `json:"riskcode"`
-	Confidence string `json:"confidence"`
-	RiskDesc   string `json:"riskdesc"`
-	Desc       string `json:"desc"`
-	URI        string `json:"uri"`
-	Param      string `json:"param"`
-	CWEID      string `json:"cweid"`
-	WASCID     string `json:"wascid"`
+	PluginID   string        `json:"pluginid"`
+	AlertRef   string        `json:"alertRef"`
+	Alert      string        `json:"alert"`
+	Name       string        `json:"name"`
+	RiskCode   string        `json:"riskcode"`
+	Confidence string        `json:"confidence"`
+	RiskDesc   string        `json:"riskdesc"`
+	Desc       string        `json:"desc"`
+	URI        string        `json:"uri"`
+	Param      string        `json:"param"`
+	CWEID      string        `json:"cweid"`
+	WASCID     string        `json:"wascid"`
+	Instances  []zapInstance `json:"instances"`
+}
+
+type zapInstance struct {
+	URI    string `json:"uri"`
+	Method string `json:"method"`
+	Param  string `json:"param"`
+	Attack string `json:"attack"`
 }
 
 func ZAP(raw []byte, targetURL string) ([]models.FindingItem, error) {
@@ -54,56 +62,88 @@ func ZAP(raw []byte, targetURL string) ([]models.FindingItem, error) {
 			if id == "" {
 				continue
 			}
-			uri := strings.TrimSpace(a.URI)
-			dedupeKey := id + "|" + uri
-			if _, dup := seen[dedupeKey]; dup {
-				continue
-			}
-			seen[dedupeKey] = struct{}{}
+			for _, loc := range zapAlertLocations(a) {
+				uri := strings.TrimSpace(loc.uri)
+				param := strings.TrimSpace(loc.param)
+				dedupeKey := id + "|" + uri + "|" + param
+				if _, dup := seen[dedupeKey]; dup {
+					continue
+				}
+				seen[dedupeKey] = struct{}{}
 
-			title := strings.TrimSpace(a.Name)
-			if title == "" {
-				title = strings.TrimSpace(a.Alert)
-			}
-			meta := map[string]any{
-				"title":   title,
-				"engine":  "owasp-zap",
-				"plugin":  strings.TrimSpace(a.PluginID),
-				"uri":     uri,
-				"message": strings.TrimSpace(a.Desc),
-			}
-			if c := strings.TrimSpace(a.Confidence); c != "" {
-				meta["confidence"] = c
-			}
-			if rd := strings.TrimSpace(a.RiskDesc); rd != "" {
-				meta["riskdesc"] = rd
-			}
-			if p := strings.TrimSpace(a.Param); p != "" {
-				meta["param"] = p
-			}
+				title := strings.TrimSpace(a.Name)
+				if title == "" {
+					title = strings.TrimSpace(a.Alert)
+				}
+				meta := map[string]any{
+					"title":   title,
+					"engine":  "owasp-zap",
+					"plugin":  strings.TrimSpace(a.PluginID),
+					"uri":     uri,
+					"message": strings.TrimSpace(a.Desc),
+				}
+				if c := strings.TrimSpace(a.Confidence); c != "" {
+					meta["confidence"] = c
+				}
+				if rd := strings.TrimSpace(a.RiskDesc); rd != "" {
+					meta["riskdesc"] = rd
+				}
+				if param != "" {
+					meta["param"] = param
+				}
+				if m := strings.TrimSpace(loc.method); m != "" {
+					meta["method"] = m
+				}
 
-			cwe := strings.TrimSpace(a.CWEID)
-			if cwe != "" && !strings.HasPrefix(strings.ToUpper(cwe), "CWE-") {
-				cwe = "CWE-" + cwe
-			}
+				cwe := strings.TrimSpace(a.CWEID)
+				if cwe != "" && !strings.HasPrefix(strings.ToUpper(cwe), "CWE-") {
+					cwe = "CWE-" + cwe
+				}
 
-			out = append(out, models.FindingItem{
-				AssetID:    host,
-				Identifier: id,
-				Severity:   zapRiskToSeverity(a.RiskCode),
-				Component:  firstNonEmpty(uri, targetURL),
-				CWE:        cwe,
-				Metadata:   meta,
-				RawPayload: map[string]any{
-					"pluginid": a.PluginID,
-					"alert":    a.Alert,
-					"uri":      uri,
-					"wascid":   strings.TrimSpace(a.WASCID),
-				},
-			})
+				out = append(out, models.FindingItem{
+					AssetID:    host,
+					Identifier: id,
+					Severity:   zapRiskToSeverity(a.RiskCode),
+					Component:  firstNonEmpty(uri, targetURL),
+					CWE:        cwe,
+					Metadata:   meta,
+					RawPayload: map[string]any{
+						"pluginid": a.PluginID,
+						"alert":    a.Alert,
+						"uri":      uri,
+						"param":    param,
+						"wascid":   strings.TrimSpace(a.WASCID),
+					},
+				})
+			}
 		}
 	}
 	return out, nil
+}
+
+type zapLocation struct {
+	uri    string
+	param  string
+	method string
+}
+
+// zapAlertLocations prefers traditional-json instances[]; falls back to alert-level uri/param.
+func zapAlertLocations(a zapAlert) []zapLocation {
+	if len(a.Instances) > 0 {
+		out := make([]zapLocation, 0, len(a.Instances))
+		for _, inst := range a.Instances {
+			out = append(out, zapLocation{
+				uri:    strings.TrimSpace(inst.URI),
+				param:  strings.TrimSpace(inst.Param),
+				method: strings.TrimSpace(inst.Method),
+			})
+		}
+		return out
+	}
+	return []zapLocation{{
+		uri:   strings.TrimSpace(a.URI),
+		param: strings.TrimSpace(a.Param),
+	}}
 }
 
 func zapAlertIdentifier(a zapAlert) string {

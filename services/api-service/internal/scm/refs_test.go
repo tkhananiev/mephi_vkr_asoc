@@ -28,3 +28,11 @@ func TestValidateGitRemoteURL(t *testing.T) {
 		t.Fatal("expected localhost rejection")
 	}
 }
+
+func TestSanitizeGitURLForDisplay(t *testing.T) {
+	in := "https://ghp_LEAKME_TOKEN:x-oauth-basic@github.com/org/repo.git"
+	got := SanitizeGitURLForDisplay(in)
+	if got != "https://github.com/org/repo.git" {
+		t.Fatalf("got %q", got)
+	}
+}

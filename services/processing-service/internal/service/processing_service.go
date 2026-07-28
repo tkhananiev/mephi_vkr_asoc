@@ -71,11 +71,13 @@ func (s *ProcessingService) ProcessFindings(ctx context.Context, request models.
 			return result, err
 		}
 
+		externalKey := vulnerabilityExternalKey(effectiveCVE, item.Identifier)
 		vulnerabilityID, inserted, err := s.repo.CreateVulnerability(ctx, models.Vulnerability{
 			CVEID:              effectiveCVE,
 			Product:            strings.TrimSpace(item.Component),
 			Version:            strings.TrimSpace(item.Version),
 			CWE:                strings.TrimSpace(item.CWE),
+			ExternalKey:        externalKey,
 			NormalizedSeverity: normalizeSeverity(item.Severity),
 			CorrelationStatus:  correlationStatus,
 			ReferenceRecordID:  refID,
@@ -105,8 +107,13 @@ func (s *ProcessingService) ProcessFindings(ctx context.Context, request models.
 			strings.TrimSpace(item.CWE),
 			strings.TrimSpace(item.Component),
 			strings.TrimSpace(item.Version),
+			externalKey,
 		))
-		groupID, _, err := s.repo.UpsertGroup(ctx, groupKey, normalizeSeverity(item.Severity), "cve_component_version")
+		groupingRule := "cve_component_version"
+		if externalKey != "" {
+			groupingRule = "cve_component_version_id"
+		}
+		groupID, _, err := s.repo.UpsertGroup(ctx, groupKey, normalizeSeverity(item.Severity), groupingRule)
 		if err != nil {
 			errMsg := err.Error()
 			_ = s.repo.FinishRun(ctx, runID, "failed", result, &errMsg)
@@ -196,14 +203,26 @@ func normalizeSeverity(value string) string {
 	}
 }
 
-func buildGroupKey(effectiveCVE, cwe, component, version string) string {
+func buildGroupKey(effectiveCVE, cwe, component, version, externalKey string) string {
 	parts := []string{
 		strings.TrimSpace(effectiveCVE),
 		strings.TrimSpace(cwe),
 		strings.TrimSpace(component),
 		strings.TrimSpace(version),
 	}
+	if ek := strings.TrimSpace(externalKey); ek != "" {
+		parts = append(parts, ek)
+	}
 	return strings.Join(parts, "::")
+}
+
+// vulnerabilityExternalKey keeps non-CVE findings (secrets, rules, plugins) from
+// collapsing into one vulnerability when CVE is absent.
+func vulnerabilityExternalKey(effectiveCVE, identifier string) string {
+	if strings.TrimSpace(effectiveCVE) != "" {
+		return ""
+	}
+	return strings.TrimSpace(identifier)
 }
 
 func ingestOwner(request models.IngestRequest) *int64 {

@@ -12,6 +12,45 @@ import (
 	"strings"
 )
 
+// SanitizeGitURLForDisplay strips userinfo (tokens/passwords) from http(s) remotes
+// so credentials are not written to logs, HTTP error bodies, or scan passports.
+func SanitizeGitURLForDisplay(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return raw
+	}
+	u, err := url.Parse(raw)
+	if err != nil || u.User == nil {
+		return raw
+	}
+	u.User = nil
+	return u.String()
+}
+
+// RedactGitRemoteInText replaces the raw remote and any embedded userinfo secrets
+// that git may echo in CombinedOutput (e.g. "could not read Password for 'https://token@…'").
+func RedactGitRemoteInText(text, repoURL string) string {
+	repoURL = strings.TrimSpace(repoURL)
+	if repoURL == "" || text == "" {
+		return text
+	}
+	safe := SanitizeGitURLForDisplay(repoURL)
+	if safe != repoURL {
+		text = strings.ReplaceAll(text, repoURL, safe)
+	}
+	u, err := url.Parse(repoURL)
+	if err != nil || u.User == nil {
+		return text
+	}
+	if pwd, ok := u.User.Password(); ok && pwd != "" {
+		text = strings.ReplaceAll(text, pwd, "***")
+	}
+	if user := u.User.Username(); user != "" {
+		text = strings.ReplaceAll(text, user+"@", "***@")
+	}
+	return text
+}
+
 func ValidateGitRemoteURL(raw string) error {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
@@ -104,16 +143,17 @@ func PrepareGitWorkspace(ctx context.Context, workRoot string, repoURL string, g
 		cmd2.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
 		out2, err2 := cmd2.CombinedOutput()
 		if err2 != nil {
-			return "", nil, fmt.Errorf("git clone: %w (%s)", err2, string(out2))
+			return "", nil, fmt.Errorf("git clone: %w (%s)", err2, RedactGitRemoteInText(string(out2), repoURL))
 		}
 		ch := exec.CommandContext(ctx, "git", "-C", dest, "checkout", ref)
 		ch.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
 		if bout, err3 := ch.CombinedOutput(); err3 != nil {
 			_ = os.RemoveAll(dest)
-			return "", nil, fmt.Errorf("git checkout %q: %w (%s); first clone attempt: %s", ref, err3, string(bout), string(out))
+			return "", nil, fmt.Errorf("git checkout %q: %w (%s); first clone attempt: %s", ref, err3,
+				RedactGitRemoteInText(string(bout), repoURL), RedactGitRemoteInText(string(out), repoURL))
 		}
 	} else if cerr != nil {
-		return "", nil, fmt.Errorf("git clone: %w (%s)", cerr, string(out))
+		return "", nil, fmt.Errorf("git clone: %w (%s)", cerr, RedactGitRemoteInText(string(out), repoURL))
 	}
 
 	sd, err := SecureSubdir(dest, subDirInRepo)

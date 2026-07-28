@@ -140,14 +140,17 @@ func (r *Repository) CreateVulnerability(ctx context.Context, vulnerability mode
 	)
 	err := r.pool.QueryRow(ctx, `
 		INSERT INTO core.vulnerabilities (
-			cve_id, product, version, cwe, normalized_severity, correlation_status, reference_record_id
-		) VALUES ($1,$2,$3,$4,$5,$6,$7)
+			cve_id, product, version, cwe, external_key, normalized_severity, correlation_status, reference_record_id
+		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
 		ON CONFLICT DO NOTHING
 		RETURNING id
-	`, vulnerability.CVEID, vulnerability.Product, vulnerability.Version, vulnerability.CWE,
+	`, vulnerability.CVEID, vulnerability.Product, vulnerability.Version, vulnerability.CWE, vulnerability.ExternalKey,
 		vulnerability.NormalizedSeverity, vulnerability.CorrelationStatus, vulnerability.ReferenceRecordID).Scan(&id)
 	if err == nil {
 		return id, true, nil
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return 0, false, err
 	}
 
 	err = r.pool.QueryRow(ctx, `
@@ -157,9 +160,10 @@ func (r *Repository) CreateVulnerability(ctx context.Context, vulnerability mode
 		  AND COALESCE(product, '') = COALESCE($2, '')
 		  AND COALESCE(version, '') = COALESCE($3, '')
 		  AND COALESCE(cwe, '') = COALESCE($4, '')
+		  AND COALESCE(external_key, '') = COALESCE($5, '')
 		ORDER BY id
 		LIMIT 1
-	`, vulnerability.CVEID, vulnerability.Product, vulnerability.Version, vulnerability.CWE).Scan(&id)
+	`, vulnerability.CVEID, vulnerability.Product, vulnerability.Version, vulnerability.CWE, vulnerability.ExternalKey).Scan(&id)
 	if err != nil {
 		return 0, false, err
 	}
