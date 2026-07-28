@@ -57,6 +57,7 @@ type Vulnerability struct {
 	Product           string
 	Version           string
 	CWE               string
+	ExternalKey       string
 	NormalizedSeverity string
 	CorrelationStatus string
 	ReferenceRecordID *int64
