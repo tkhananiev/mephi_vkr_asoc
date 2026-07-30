@@ -56,27 +56,19 @@ func (o *Orchestrator) RunScan(ctx context.Context, scannerID string, request mo
 	switch id {
 	case "semgrep":
 		req := request
-		if strings.TrimSpace(req.ScannerName) == "" {
-			req.ScannerName = "semgrep"
-		}
+		req.ScannerName = canonicalIngestScannerName(id, "")
 		return o.runSemgrepScenario(ctx, req, ownerUserID)
 	case "gitleaks":
 		req := request
-		if strings.TrimSpace(req.ScannerName) == "" {
-			req.ScannerName = "gitleaks"
-		}
+		req.ScannerName = canonicalIngestScannerName(id, "")
 		return o.runGitleaksScenario(ctx, req, ownerUserID)
 	case "trivy-sca", "sca", "trivy":
 		req := request
-		if strings.TrimSpace(req.ScannerName) == "" {
-			req.ScannerName = "trivy-sca"
-		}
+		req.ScannerName = canonicalIngestScannerName(id, "")
 		return o.runScaScenario(ctx, req, ownerUserID)
 	case "zap-dast", "dast", "zap":
 		req := request
-		if strings.TrimSpace(req.ScannerName) == "" {
-			req.ScannerName = "zap-dast"
-		}
+		req.ScannerName = canonicalIngestScannerName(id, "")
 		return o.runDastScenario(ctx, req, ownerUserID)
 	default:
 		if o.dynamicLookup != nil {
@@ -85,6 +77,29 @@ func (o *Orchestrator) RunScan(ctx context.Context, scannerID string, request mo
 			}
 		}
 		return models.PassportResponse{}, fmt.Errorf("%w: %q (supported: semgrep, gitleaks, trivy-sca, zap-dast, or additional catalog with scanner_invoke_url)", ErrUnsupportedScannerID, id)
+	}
+}
+
+// canonicalIngestScannerName is the scanner_name used for processing purge/ingest.
+// It is derived only from the executed scanner identity (and catalog name for
+// dynamic scanners). Client-supplied scanner_name must never win, otherwise a
+// scan can purge another scanner's findings for the same owner/product.
+func canonicalIngestScannerName(executedID, catalogName string) string {
+	id := strings.ToLower(strings.TrimSpace(executedID))
+	switch id {
+	case "semgrep":
+		return "semgrep"
+	case "gitleaks":
+		return "gitleaks"
+	case "trivy-sca", "sca", "trivy":
+		return "trivy-sca"
+	case "zap-dast", "dast", "zap":
+		return "zap-dast"
+	default:
+		if n := strings.TrimSpace(catalogName); n != "" {
+			return n
+		}
+		return strings.TrimSpace(executedID)
 	}
 }
 
@@ -190,9 +205,7 @@ func (o *Orchestrator) runDastScenario(ctx context.Context, request models.ScanR
 
 func (o *Orchestrator) runDynamicHTTPScannerScenario(ctx context.Context, scannerID string, invokeURL string, scannerName string, runnerCommand string, request models.ScanRequest, ownerUserID int64) (models.PassportResponse, error) {
 	reqCopy := request
-	if strings.TrimSpace(reqCopy.ScannerName) == "" {
-		reqCopy.ScannerName = scannerName
-	}
+	reqCopy.ScannerName = canonicalIngestScannerName(scannerID, scannerName)
 	raw, err := o.postDynamicScanPayload(ctx, invokeURL, reqCopy, scannerID, runnerCommand)
 	if err != nil {
 		return models.PassportResponse{}, err
