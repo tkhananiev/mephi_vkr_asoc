@@ -7,7 +7,7 @@ import (
 )
 
 type integrationsResponse struct {
-	Integrations []integrationstore.Item `json:"integrations"`
+	Integrations []integrationstore.PublicItem `json:"integrations"`
 }
 
 func (h *Handler) handleIntegrationsList(w http.ResponseWriter, r *http.Request) {
@@ -15,5 +15,5 @@ func (h *Handler) handleIntegrationsList(w http.ResponseWriter, r *http.Request)
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
 		return
 	}
-	writeJSON(w, http.StatusOK, integrationsResponse{Integrations: h.integrationStore.ListMerged()})
+	writeJSON(w, http.StatusOK, integrationsResponse{Integrations: h.integrationStore.ListPublic()})
 }
