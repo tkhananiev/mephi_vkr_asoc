@@ -294,7 +294,46 @@ components:
         integrations:
           type: array
           items:
-            $ref: "#/components/schemas/IntegrationCatalogItem"
+            $ref: "#/components/schemas/PublicIntegrationCatalogItem"
+    PublicIntegrationCatalogItem:
+      type: object
+      description: |
+        Публичный каталог для консоли/API-ключа. Без scanner_invoke_url, runner_command,
+        invoke_payload_template и сетевых адресов раннера (они только в admin API).
+      properties:
+        id:
+          type: string
+        kind:
+          type: string
+        title:
+          type: string
+        summary:
+          type: string
+        phase:
+          type: string
+          enum: [ready, planned]
+        enabled:
+          type: boolean
+        input_kind:
+          type: string
+        required_context:
+          type: array
+          items:
+            type: string
+        scanner_name:
+          type: string
+        api_scan_path:
+          type: string
+        console_path:
+          type: string
+        capabilities:
+          type: array
+          items:
+            type: string
+        note:
+          type: string
+        invoke_hint:
+          type: string
     AdminIntegrationsCatalogDetail:
       type: object
       properties:

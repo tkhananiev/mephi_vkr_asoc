@@ -45,6 +45,51 @@ type Item struct {
 	InvokePayloadTemplate string `json:"invoke_payload_template,omitempty"`
 }
 
+// PublicItem is the console/API catalog view: metadata only, no execution secrets.
+type PublicItem struct {
+	ID              string   `json:"id"`
+	Kind            string   `json:"kind"`
+	Title           string   `json:"title"`
+	Summary         string   `json:"summary"`
+	Phase           string   `json:"phase"`
+	Enabled         bool     `json:"enabled"`
+	InputKind       string   `json:"input_kind"`
+	RequiredContext []string `json:"required_context,omitempty"`
+	ScannerName     string   `json:"scanner_name,omitempty"`
+	APIScanPath     string   `json:"api_scan_path,omitempty"`
+	ConsolePath     string   `json:"console_path,omitempty"`
+	Capabilities    []string `json:"capabilities,omitempty"`
+	Note            string   `json:"note,omitempty"`
+	InvokeHint      string   `json:"invoke_hint,omitempty"`
+}
+
+func (it Item) Public() PublicItem {
+	caps := it.Capabilities
+	if len(caps) == 0 {
+		caps = nil
+	}
+	ctx := it.RequiredContext
+	if len(ctx) == 0 {
+		ctx = nil
+	}
+	return PublicItem{
+		ID:              it.ID,
+		Kind:            it.Kind,
+		Title:           it.Title,
+		Summary:         it.Summary,
+		Phase:           it.Phase,
+		Enabled:         it.Enabled,
+		InputKind:       it.InputKind,
+		RequiredContext: ctx,
+		ScannerName:     it.ScannerName,
+		APIScanPath:     it.APIScanPath,
+		ConsolePath:     it.ConsolePath,
+		Capabilities:    caps,
+		Note:            it.Note,
+		InvokeHint:      it.InvokeHint,
+	}
+}
+
 var builtinCatalog = []Item{
 	{
 		ID:              "semgrep",
@@ -275,6 +320,9 @@ func Validate(it Item, reserved map[string]struct{}) error {
 		if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" {
 			return fmt.Errorf("scanner_invoke_url must be absolute URL with http or https scheme")
 		}
+		if parsed.User != nil {
+			return fmt.Errorf("scanner_invoke_url must not embed credentials")
+		}
 	}
 	return nil
 }
@@ -340,6 +388,16 @@ func (s *Store) ListMerged() []Item {
 		return add[i].ID < add[j].ID
 	})
 	out := append(append([]Item{}, builtinCatalog...), add...)
+	return out
+}
+
+// ListPublic returns the merged catalog with execution/network secrets omitted.
+func (s *Store) ListPublic() []PublicItem {
+	merged := s.ListMerged()
+	out := make([]PublicItem, len(merged))
+	for i := range merged {
+		out[i] = merged[i].Public()
+	}
 	return out
 }
 
