@@ -62,7 +62,8 @@ func NewSyncService(
 }
 
 func (s *SyncService) SyncBDU(ctx context.Context) (models.SyncResult, error) {
-	return s.syncSource(ctx, "bdu_fstec", s.bdu)
+	// RSS is a thin incremental feed: never overwrite bulk-imported catalog rows/aliases.
+	return s.syncSource(ctx, "bdu_fstec", s.bdu, true)
 }
 
 func (s *SyncService) SyncBDUBulk(ctx context.Context) (models.SyncResult, error) {
@@ -256,7 +257,7 @@ func (s *SyncService) SyncNVDAsync() error {
 func (s *SyncService) syncNVDUnlocked(ctx context.Context) (models.SyncResult, error) {
 	paged, ok := s.nvd.(NVDFullSync)
 	if !ok {
-		return s.syncSource(ctx, "nvd", s.nvd)
+		return s.syncSource(ctx, "nvd", s.nvd, false)
 	}
 
 	runID, err := s.repo.StartSyncRun(ctx, "nvd")
@@ -303,7 +304,7 @@ func (s *SyncService) SyncNVDByCVE(ctx context.Context, cveID string) (models.Sy
 		return result, err
 	}
 
-	out, err := s.persistRecords(ctx, runID, "nvd", records)
+	out, err := s.persistRecords(ctx, runID, "nvd", records, false)
 	if err != nil {
 		return out, err
 	}
@@ -360,7 +361,7 @@ func (s *SyncService) CatalogStatus(ctx context.Context) (models.CatalogStatusRe
 	}, nil
 }
 
-func (s *SyncService) syncSource(ctx context.Context, sourceCode string, client SourceClient) (models.SyncResult, error) {
+func (s *SyncService) syncSource(ctx context.Context, sourceCode string, client SourceClient, skipExistingReference bool) (models.SyncResult, error) {
 	runID, err := s.repo.StartSyncRun(ctx, sourceCode)
 	if err != nil {
 		return models.SyncResult{}, err
@@ -378,10 +379,11 @@ func (s *SyncService) syncSource(ctx context.Context, sourceCode string, client 
 		return result, err
 	}
 
-	return s.persistRecords(ctx, runID, sourceCode, records)
+	return s.persistRecords(ctx, runID, sourceCode, records, skipExistingReference)
 }
 
-// Если skipExistingReference=true (полный импорт БДУ bulk): при уже существующей записи каталога только пропуск — без UPDATE полей и без правки алиасов у старой строки.
+// Если skipExistingReference=true (BDU RSS и полный bulk): при уже существующей записи каталога только пропуск —
+// без UPDATE полей и без DELETE/REPLACE алиасов у старой строки. Нужно, чтобы тонкий RSS не затирал vulxml/xlsx.
 func (s *SyncService) applyRecords(ctx context.Context, sourceCode string, records []models.SourceRecord, skipExistingReference bool) (discovered, processed, inserted, updated int) {
 	discovered = len(records)
 	for _, record := range records {
@@ -450,13 +452,13 @@ func (s *SyncService) applyRecords(ctx context.Context, sourceCode string, recor
 	return discovered, processed, inserted, updated
 }
 
-func (s *SyncService) persistRecords(ctx context.Context, runID int64, sourceCode string, records []models.SourceRecord) (models.SyncResult, error) {
+func (s *SyncService) persistRecords(ctx context.Context, runID int64, sourceCode string, records []models.SourceRecord, skipExistingReference bool) (models.SyncResult, error) {
 	result := models.SyncResult{
 		SourceCode: sourceCode,
 		RunID:      runID,
 	}
 
-	d, p, ins, upd := s.applyRecords(ctx, sourceCode, records, false)
+	d, p, ins, upd := s.applyRecords(ctx, sourceCode, records, skipExistingReference)
 	result.ItemsDiscovered = d
 	result.ItemsProcessed = p
 	result.ItemsInserted = ins
