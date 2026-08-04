@@ -457,6 +457,9 @@ spec:
             # Максимум времени на одну команду shell (совпадает с таймаутом HTTP-клиента api-service к сканеру по умолчанию).
             - name: APP_EXEC_TIMEOUT_SEC
               value: "600"
+            # Confine filesystem target_path / cmd.Dir to these roots (comma-separated).
+            - name: APP_ALLOWED_SCAN_ROOTS
+              value: "/tmp,/app/demo/scan-targets"
           readinessProbe:
             httpGet:
               path: /health

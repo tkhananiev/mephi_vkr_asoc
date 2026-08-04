@@ -15,7 +15,10 @@ type App struct {
 }
 
 func New(cfg config.Config) *App {
-	h := &httpapi.Handler{ExecTimeout: time.Duration(cfg.ExecTimeout) * time.Second}
+	h := &httpapi.Handler{
+		ExecTimeout:      time.Duration(cfg.ExecTimeout) * time.Second,
+		AllowedScanRoots: cfg.AllowedScanRoots,
+	}
 	mux := http.NewServeMux()
 	h.Register(mux)
 	addr := fmt.Sprintf(":%d", cfg.HTTPPort)
