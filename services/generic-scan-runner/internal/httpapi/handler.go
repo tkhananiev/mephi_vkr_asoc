@@ -9,10 +9,13 @@ import (
 	"os/exec"
 	"strings"
 	"time"
+
+	"mephi_vkr_asoc/services/generic-scan-runner/internal/workspace"
 )
 
 type Handler struct {
-	ExecTimeout time.Duration
+	ExecTimeout      time.Duration
+	AllowedScanRoots []string
 }
 
 type runRequest struct {
@@ -57,19 +60,27 @@ func (h *Handler) handleRun(w http.ResponseWriter, r *http.Request) {
 	if h.ExecTimeout <= 0 {
 		h.ExecTimeout = 15 * time.Minute
 	}
-	ctx, cancel := context.WithTimeout(r.Context(), h.ExecTimeout)
-	defer cancel()
 
-	expanded := expandCommand(cmdStr, body)
 	workDir := strings.TrimSpace(body.TargetPath)
 	if workDir == "" {
 		workDir = "/tmp"
 	}
+	confined, err := workspace.AssertPathUnderAnyRoot(workDir, h.AllowedScanRoots)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	body.TargetPath = confined
 
-	log.Printf("generic-scan-runner: scanner_id=%q dir=%q cmd=%q", strings.TrimSpace(body.ScannerID), workDir, expanded)
+	ctx, cancel := context.WithTimeout(r.Context(), h.ExecTimeout)
+	defer cancel()
+
+	expanded := expandCommand(cmdStr, body)
+
+	log.Printf("generic-scan-runner: scanner_id=%q dir=%q cmd=%q", strings.TrimSpace(body.ScannerID), confined, expanded)
 
 	cmd := exec.CommandContext(ctx, "/bin/sh", "-c", expanded)
-	cmd.Dir = workDir
+	cmd.Dir = confined
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		msg := fmt.Sprintf("command failed: %v; output=%s", err, truncate(string(out), 8000))
