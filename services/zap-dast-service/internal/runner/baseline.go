@@ -14,6 +14,9 @@ func runZAPBaseline(ctx context.Context, zapHome, targetURL string, timeoutMin i
 	if _, err := validateTargetURL(targetURL); err != nil {
 		return nil, err
 	}
+	if err := assertTargetRedirectChainSafe(ctx, targetURL); err != nil {
+		return nil, err
+	}
 	home := strings.TrimSpace(zapHome)
 	if home == "" {
 		home = "/zap"
