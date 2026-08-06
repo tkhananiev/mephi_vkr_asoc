@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
-	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
@@ -271,9 +270,8 @@ func Validate(it Item, reserved map[string]struct{}) error {
 		}
 	}
 	if u := strings.TrimSpace(it.ScannerInvokeURL); u != "" {
-		parsed, err := url.Parse(u)
-		if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" {
-			return fmt.Errorf("scanner_invoke_url must be absolute URL with http or https scheme")
+		if err := ValidateScannerInvokeURL(u); err != nil {
+			return err
 		}
 	}
 	return nil

@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"mephi_vkr_asoc/services/api-service/internal/integrationstore"
 	apikafka "mephi_vkr_asoc/services/api-service/internal/kafka"
 	"mephi_vkr_asoc/services/api-service/internal/models"
 )
@@ -32,6 +33,9 @@ type Orchestrator struct {
 	dastURL       string
 	adapterURL    string
 	httpClient    *http.Client
+	// dynamicHTTP never follows redirects: a 302 from a public host to IMDS would
+	// otherwise turn the orchestrator POST into a GET against cloud metadata.
+	dynamicHTTP   *http.Client
 	kafkaIngest   *apikafka.IngestBridge
 	dynamicLookup DynamicScannerLookup
 }
@@ -46,6 +50,12 @@ func New(processingURL, jiraURL, semgrepURL, gitleaksURL, scaURL, dastURL, adapt
 		dastURL:       strings.TrimRight(dastURL, "/"),
 		adapterURL:    strings.TrimRight(adapterURL, "/"),
 		httpClient:    &http.Client{Timeout: 10 * time.Minute},
+		dynamicHTTP: &http.Client{
+			Timeout: 10 * time.Minute,
+			CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+				return fmt.Errorf("scanner_invoke_url redirects are not allowed")
+			},
+		},
 		kafkaIngest:   kafkaIngest,
 		dynamicLookup: dynamicLookup,
 	}
@@ -230,6 +240,9 @@ func mergeDynamicScannerJSON(request models.ScanRequest, scannerID string, runne
 }
 
 func (o *Orchestrator) postDynamicScanPayload(ctx context.Context, invokeURL string, request models.ScanRequest, scannerID string, runnerCommand string) ([]byte, error) {
+	if err := integrationstore.ValidateScannerInvokeURL(invokeURL); err != nil {
+		return nil, err
+	}
 	var body []byte
 	var err error
 	if strings.TrimSpace(runnerCommand) != "" {
@@ -246,7 +259,11 @@ func (o *Orchestrator) postDynamicScanPayload(ctx context.Context, invokeURL str
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := o.httpClient.Do(req)
+	client := o.dynamicHTTP
+	if client == nil {
+		client = o.httpClient
+	}
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
 	}
