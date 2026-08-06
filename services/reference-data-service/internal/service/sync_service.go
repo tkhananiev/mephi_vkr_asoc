@@ -85,7 +85,7 @@ func (s *SyncService) syncBDUBulkUnlocked(ctx context.Context) (models.SyncResul
 	lastLog := started
 	onBatch := func(page []models.SourceRecord) error {
 		batchNum++
-		d, p, ins, upd := s.applyRecords(ctx, "bdu_fstec", page, true)
+		d, p, ins, upd := s.applyBDUBulkPage(ctx, page)
 		result.ItemsDiscovered += d
 		result.ItemsProcessed += p
 		result.ItemsInserted += ins
@@ -381,7 +381,16 @@ func (s *SyncService) syncSource(ctx context.Context, sourceCode string, client 
 	return s.persistRecords(ctx, runID, sourceCode, records)
 }
 
-// Если skipExistingReference=true (полный импорт БДУ bulk): при уже существующей записи каталога только пропуск — без UPDATE полей и без правки алиасов у старой строки.
+// applyBDUBulkPage persists one vulxml/xlsx batch. skipExisting must stay false: scheduled
+// SyncBDU (RSS) shares source_code=bdu_fstec and often inserts thin rows first; insert-if-absent
+// would permanently starve those IDs of rich CWE/CVE alias graphs from bulk.
+func (s *SyncService) applyBDUBulkPage(ctx context.Context, page []models.SourceRecord) (discovered, processed, inserted, updated int) {
+	return s.applyRecords(ctx, "bdu_fstec", page, false)
+}
+
+// Если skipExistingReference=true: при уже существующей записи каталога только пропуск — без UPDATE
+// полей и без DELETE/REPLACE алиасов (тонкий источник не затирает уже импортированную строку).
+// Полный bulk БДУ передаёт false через applyBDUBulkPage, чтобы обогащать тонкие RSS-строки.
 func (s *SyncService) applyRecords(ctx context.Context, sourceCode string, records []models.SourceRecord, skipExistingReference bool) (discovered, processed, inserted, updated int) {
 	discovered = len(records)
 	for _, record := range records {
