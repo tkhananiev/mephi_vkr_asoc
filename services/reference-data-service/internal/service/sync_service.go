@@ -157,7 +157,14 @@ func (s *SyncService) syncNVDPaged(ctx context.Context, paged NVDFullSync, runID
 		result.ItemsInserted += ins
 		result.ItemsUpdated += upd
 		pageSeq++
-	
+
+		// applyRecords logs and skips per-record DB errors. If we still advanced
+		// the lastMod cursor after a partial page, those CVEs would never be
+		// retried on later incremental syncs.
+		if p < d {
+			return fmt.Errorf("nvd page upsert incomplete: processed=%d discovered=%d", p, d)
+		}
+
 		if pageSeq <= 8 || pageSeq%12 == 0 || time.Since(lastProgWrite) >= 4*time.Second {
 			lastProgWrite = time.Now()
 			if err := s.repo.UpdateSyncRunProgress(ctx, runID, result); err != nil {
@@ -461,6 +468,12 @@ func (s *SyncService) persistRecords(ctx context.Context, runID int64, sourceCod
 	result.ItemsProcessed = p
 	result.ItemsInserted = ins
 	result.ItemsUpdated = upd
+
+	if p < d {
+		errMsg := fmt.Sprintf("upsert incomplete: processed=%d discovered=%d", p, d)
+		_ = s.repo.FinishSyncRun(ctx, runID, "failed", result, &errMsg)
+		return result, fmt.Errorf("%s", errMsg)
+	}
 
 	if err := s.repo.FinishSyncRun(ctx, runID, "completed", result, nil); err != nil {
 		return result, fmt.Errorf("finish sync run: %w", err)
