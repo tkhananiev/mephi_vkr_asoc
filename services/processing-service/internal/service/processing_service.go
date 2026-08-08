@@ -100,7 +100,7 @@ func (s *ProcessingService) ProcessFindings(ctx context.Context, request models.
 			return result, err
 		}
 
-		groupKey := scopedGroupKey(owner, buildGroupKey(
+		groupKey := scopedGroupKey(owner, request.ConsoleProductID, buildGroupKey(
 			effectiveCVE,
 			strings.TrimSpace(item.CWE),
 			strings.TrimSpace(item.Component),
@@ -220,9 +220,21 @@ func normalizeRunChannel(raw string) string {
 	return "manual"
 }
 
-func scopedGroupKey(owner *int64, baseKey string) string {
+// scopedGroupKey isolates triage/Jira groups per console owner and product.
+// Without a product segment, two products owned by the same user that share a
+// CVE/component signature collapse onto one group_key — false_positive on
+// product A also hides the finding for product B, and a shared ticket_links row
+// is overwritten/removed across products.
+func scopedGroupKey(owner *int64, consoleProductID *int64, baseKey string) string {
+	key := baseKey
 	if owner != nil && *owner > 0 {
-		return fmt.Sprintf("u:%d:%s", *owner, baseKey)
+		if consoleProductID != nil && *consoleProductID > 0 {
+			return fmt.Sprintf("u:%d:p:%d:%s", *owner, *consoleProductID, key)
+		}
+		return fmt.Sprintf("u:%d:%s", *owner, key)
 	}
-	return baseKey
+	if consoleProductID != nil && *consoleProductID > 0 {
+		return fmt.Sprintf("p:%d:%s", *consoleProductID, key)
+	}
+	return key
 }
