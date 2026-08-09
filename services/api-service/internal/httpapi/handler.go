@@ -67,7 +67,6 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	})
 	mux.HandleFunc("/api/v1/groups", h.handleGroupsRoute)
 	mux.HandleFunc("/api/v1/groups/", h.handleGroupsRoute)
-	mux.HandleFunc("/api/v1/report/vulnerabilities/stats", h.handleReportVulnerabilityStatsProxy)
 	mux.HandleFunc("/api/v1/report/vulnerabilities", h.handleReportVulnerabilitiesProxy)
 	mux.HandleFunc("/api/v1/findings/ingest", h.handlePublicFindingsIngest)
 	mux.HandleFunc("/api/v1/scans", h.handleUnifiedScan)

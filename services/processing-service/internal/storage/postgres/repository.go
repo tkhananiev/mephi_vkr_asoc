@@ -254,20 +254,7 @@ func (r *Repository) ListGroups(ctx context.Context, limit int, ownerUserID *int
 			$2::bigint IS NULL
 			OR g.group_key LIKE ('u:' || $2::bigint::text || ':%')
 		)
-		AND (
-			$3::bigint IS NULL
-			OR EXISTS (
-				SELECT 1
-				FROM core.group_vulnerabilities gv
-				JOIN core.vulnerabilities v ON v.id = gv.vulnerability_id
-				JOIN core.finding_vulnerabilities fv ON fv.vulnerability_id = v.id
-				JOIN core.findings f ON f.id = fv.finding_id
-				JOIN core.processing_runs pr ON pr.id = f.processing_run_id
-				WHERE gv.group_id = g.id
-				  AND ($2::bigint IS NULL OR pr.owner_user_id = $2)
-				  AND pr.console_product_id = $3
-			)
-		)
+		AND `+sqlGroupVisibleForProduct("$2", "$3")+`
 		AND (
 			$4::text = 'all'
 			OR g.status = $4::text
@@ -291,7 +278,7 @@ func (r *Repository) ListGroups(ctx context.Context, limit int, ownerUserID *int
 	return result, rows.Err()
 }
 
-func (r *Repository) UpdateGroupStatus(ctx context.Context, groupID int64, status string, ownerUserID *int64) (models.VulnerabilityGroup, error) {
+func (r *Repository) UpdateGroupStatus(ctx context.Context, groupID int64, status string, ownerUserID *int64, consoleProductID *int64) (models.VulnerabilityGroup, error) {
 	var item models.VulnerabilityGroup
 	err := r.pool.QueryRow(ctx, `
 		UPDATE core.vulnerability_groups g
@@ -299,6 +286,7 @@ func (r *Repository) UpdateGroupStatus(ctx context.Context, groupID int64, statu
 		WHERE g.id = $1
 		  AND (
 			$3::bigint IS NULL
+			OR g.group_key LIKE ('u:' || $3::bigint::text || ':%')
 			OR EXISTS (
 				SELECT 1
 				FROM core.group_vulnerabilities gv
@@ -310,8 +298,9 @@ func (r *Repository) UpdateGroupStatus(ctx context.Context, groupID int64, statu
 				  AND pr.owner_user_id = $3
 			)
 		  )
+		  AND `+sqlGroupVisibleForProduct("$3", "$4")+`
 		RETURNING g.id, g.group_key, g.grouping_rule, g.severity_max, g.assets_count, g.status
-	`, groupID, status, ownerUserID).Scan(
+	`, groupID, status, ownerUserID, consoleProductID).Scan(
 		&item.ID, &item.GroupKey, &item.GroupingRule, &item.SeverityMax, &item.AssetsCount, &item.Status,
 	)
 	if err != nil {
@@ -439,6 +428,7 @@ func (r *Repository) ListVulnerabilityReport(ctx context.Context, limit int, own
 				  )
 			)
 		)
+		AND `+sqlGroupVisibleForProduct("$2", "$3")+`
 		AND (
 			$4::text IS NULL OR btrim($4::text) = ''
 			OR strpos(lower(g.group_key), lower(btrim($4::text))) > 0
@@ -553,20 +543,7 @@ func (r *Repository) GetGroupJiraContext(ctx context.Context, groupID int64, own
 			$2::bigint IS NULL
 			OR g.group_key LIKE ('u:' || $2::bigint::text || ':%')
 		  )
-		  AND (
-			$3::bigint IS NULL
-			OR EXISTS (
-				SELECT 1
-				FROM core.group_vulnerabilities gv_a
-				JOIN core.vulnerabilities v_a ON v_a.id = gv_a.vulnerability_id
-				JOIN core.finding_vulnerabilities fv_a ON fv_a.vulnerability_id = v_a.id
-				JOIN core.findings f_a ON f_a.id = fv_a.finding_id
-				JOIN core.processing_runs pr_a ON pr_a.id = f_a.processing_run_id
-				WHERE gv_a.group_id = g.id
-				  AND ($2::bigint IS NULL OR pr_a.owner_user_id = $2)
-				  AND pr_a.console_product_id = $3
-			)
-		  )
+		  AND `+sqlGroupVisibleForProduct("$2", "$3")+`
 	`, groupID, ownerUserID, consoleProductID).Scan(&ctxOut.GroupID, &ctxOut.GroupKey, &ctxOut.SeverityMax)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {

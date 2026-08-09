@@ -158,8 +158,17 @@ func (h *Handler) handleGroupByID(w http.ResponseWriter, r *http.Request, idRaw 
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json body"})
 		return
 	}
+	cp, cpErr := parseConsoleProductFilter(r)
+	if cpErr != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": *cpErr})
+		return
+	}
 	owner := parseOwnerHeader(r)
-	updated, err := h.processingService.UpdateGroupStatus(r.Context(), groupID, body.Status, owner)
+	if cp != nil && owner == nil {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "console_product_id requires X-ASOC-Console-User-ID"})
+		return
+	}
+	updated, err := h.processingService.UpdateGroupStatus(r.Context(), groupID, body.Status, owner, cp)
 	if err != nil {
 		if strings.Contains(err.Error(), "not found") || strings.Contains(err.Error(), "forbidden") {
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
