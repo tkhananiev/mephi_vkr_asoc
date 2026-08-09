@@ -21,7 +21,7 @@ type ProcessingRepository interface {
 	UpsertGroup(ctx context.Context, groupKey, severity, groupingRule string) (int64, bool, error)
 	LinkGroupToVulnerability(ctx context.Context, groupID, vulnerabilityID int64) error
 	ListGroups(ctx context.Context, limit int, ownerUserID *int64, consoleProductID *int64, statusFilter string) ([]models.VulnerabilityGroup, error)
-	UpdateGroupStatus(ctx context.Context, groupID int64, status string, ownerUserID *int64) (models.VulnerabilityGroup, error)
+	UpdateGroupStatus(ctx context.Context, groupID int64, status string, ownerUserID *int64, consoleProductID *int64) (models.VulnerabilityGroup, error)
 	ListVulnerabilityReport(ctx context.Context, limit int, ownerUserID *int64, consoleProductID *int64, filter *models.VulnerabilityReportFilter) ([]models.VulnerabilityReportRow, error)
 	GetGroupJiraContext(ctx context.Context, groupID int64, ownerUserID *int64, consoleProductID *int64) (models.GroupJiraContext, error)
 }

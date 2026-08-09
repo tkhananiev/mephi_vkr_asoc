@@ -51,6 +51,9 @@ func (h *Handler) proxyPATCHGroupStatus(w http.ResponseWriter, r *http.Request, 
 	if uid, ok := ConsoleUserFromRequest(r); ok {
 		req.Header.Set(HeaderConsoleUserID, strconv.FormatInt(uid, 10))
 	}
+	if cp := strings.TrimSpace(r.URL.Query().Get("console_product_id")); cp != "" {
+		req.URL.RawQuery = "console_product_id=" + cp
+	}
 	resp, err := h.httpUpstream.Do(req)
 	if err != nil {
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
