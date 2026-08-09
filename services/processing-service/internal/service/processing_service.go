@@ -100,7 +100,7 @@ func (s *ProcessingService) ProcessFindings(ctx context.Context, request models.
 			return result, err
 		}
 
-		groupKey := scopedGroupKey(owner, buildGroupKey(
+		groupKey := scopedGroupKey(owner, request.ConsoleProductID, buildGroupKey(
 			effectiveCVE,
 			strings.TrimSpace(item.CWE),
 			strings.TrimSpace(item.Component),
@@ -139,7 +139,7 @@ var allowedGroupStatuses = map[string]struct{}{
 	"risk_accepted":   {},
 }
 
-func (s *ProcessingService) UpdateGroupStatus(ctx context.Context, groupID int64, status string, ownerUserID *int64) (models.VulnerabilityGroup, error) {
+func (s *ProcessingService) UpdateGroupStatus(ctx context.Context, groupID int64, status string, ownerUserID *int64, consoleProductID *int64) (models.VulnerabilityGroup, error) {
 	normalized := strings.ToLower(strings.TrimSpace(status))
 	if _, ok := allowedGroupStatuses[normalized]; !ok {
 		return models.VulnerabilityGroup{}, fmt.Errorf("invalid status: allowed open, false_positive, risk_accepted")
@@ -147,7 +147,7 @@ func (s *ProcessingService) UpdateGroupStatus(ctx context.Context, groupID int64
 	if groupID <= 0 {
 		return models.VulnerabilityGroup{}, fmt.Errorf("invalid group id")
 	}
-	return s.repo.UpdateGroupStatus(ctx, groupID, normalized, ownerUserID)
+	return s.repo.UpdateGroupStatus(ctx, groupID, normalized, ownerUserID, consoleProductID)
 }
 
 func (s *ProcessingService) ListVulnerabilityReport(ctx context.Context, limit int, ownerUserID *int64, consoleProductID *int64, filter *models.VulnerabilityReportFilter) ([]models.VulnerabilityReportRow, error) {
@@ -220,9 +220,49 @@ func normalizeRunChannel(raw string) string {
 	return "manual"
 }
 
-func scopedGroupKey(owner *int64, baseKey string) string {
+// scopedGroupKey isolates triage/Jira groups per console owner and product.
+// Without a product segment, two products owned by the same user that share a
+// CVE/component signature collapse onto one group_key — false_positive on
+// product A also hides the finding for product B, and a shared ticket_links row
+// is overwritten/removed across products.
+func scopedGroupKey(owner *int64, consoleProductID *int64, baseKey string) string {
+	key := baseKey
 	if owner != nil && *owner > 0 {
-		return fmt.Sprintf("u:%d:%s", *owner, baseKey)
+		if consoleProductID != nil && *consoleProductID > 0 {
+			return fmt.Sprintf("u:%d:p:%d:%s", *owner, *consoleProductID, key)
+		}
+		return fmt.Sprintf("u:%d:%s", *owner, key)
 	}
-	return baseKey
+	if consoleProductID != nil && *consoleProductID > 0 {
+		return fmt.Sprintf("p:%d:%s", *consoleProductID, key)
+	}
+	return key
+}
+
+// groupKeyMatchesProductScope mirrors the repository product filter for keys that
+// already carry a :p:<id>: segment. Legacy keys without a product segment return
+// true so SQL can fall back to finding→run product linkage.
+func groupKeyMatchesProductScope(groupKey string, ownerUserID, consoleProductID *int64) bool {
+	if consoleProductID == nil || *consoleProductID <= 0 {
+		return true
+	}
+	product := *consoleProductID
+	if ownerUserID != nil && *ownerUserID > 0 {
+		want := fmt.Sprintf("u:%d:p:%d:", *ownerUserID, product)
+		if strings.HasPrefix(groupKey, want) {
+			return true
+		}
+		ownerProductPrefix := fmt.Sprintf("u:%d:p:", *ownerUserID)
+		if strings.HasPrefix(groupKey, ownerProductPrefix) {
+			return false
+		}
+	}
+	wantProductOnly := fmt.Sprintf("p:%d:", product)
+	if strings.HasPrefix(groupKey, wantProductOnly) {
+		return true
+	}
+	if strings.HasPrefix(groupKey, "p:") {
+		return false
+	}
+	return true
 }
